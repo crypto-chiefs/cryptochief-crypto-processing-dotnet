@@ -102,6 +102,7 @@ named handlers) you add downstream.
 | Static-deposit history | `client.StaticDeposits` | `InfoAsync`, `HistoryAsync` |
 | On-chain queries | `client.Blockchain` | `ContractsAvailableAsync`, `WalletBalanceAsync`, `TransactionStatusAsync` |
 | Fiat ↔ crypto rate quote | `client.Currencies` | `FiatToCryptoAsync`, `CryptoToFiatAsync` |
+| Credits balance & top-up (billing-exempt) | `client.Credits` | `BalanceAsync`, `TopupAsync` |
 
 ## Payout with confirmation
 

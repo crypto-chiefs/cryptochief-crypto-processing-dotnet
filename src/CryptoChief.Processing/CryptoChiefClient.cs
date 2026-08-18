@@ -32,6 +32,7 @@ public sealed class CryptoChiefClient
     public StaticDepositsService StaticDeposits { get; }
     public BlockchainService Blockchain { get; }
     public CurrenciesService Currencies { get; }
+    public CreditsService Credits { get; }
 
     public CryptoChiefClient(string merchantId, string apiKey)
         : this(new CryptoChiefClientOptions { MerchantId = merchantId, ApiKey = apiKey }) { }
@@ -68,6 +69,7 @@ public sealed class CryptoChiefClient
         StaticDeposits = new StaticDepositsService(this);
         Blockchain     = new BlockchainService(this);
         Currencies     = new CurrenciesService(this);
+        Credits        = new CreditsService(this);
     }
 
     public string MerchantId => Options.MerchantId;
