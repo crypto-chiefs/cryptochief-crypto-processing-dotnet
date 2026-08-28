@@ -97,7 +97,7 @@ named handlers) you add downstream.
 | TON contract calls (Jetton / NFT / text) | `client.Transactions` | `JettonTransferAsync`, `NftTransferAsync`, `SendTonCommentAsync`, `SignTonCallAsync` |
 | Accept incoming payments | `client.PayIns` | `CreateAsync`, `SelectAssetAsync`, `ResetAssetAsync`, `CancelAsync`, `InfoAsync`, `HistoryAsync` |
 | Wallet management + RSA decrypt | `client.Wallets` | `GenerateAsync`, `ListAsync`, `InfoAsync`, `FreezeAsync`, `DecryptPrivateKey` |
-| Treasury sweeps | `client.Sweeps` | `ForceAsync`, `HistoryAsync`, `WalletHistoryAsync` |
+| Treasury sweeps | `client.Sweeps` | `ForceAsync`, `HistoryAsync`, `WalletHistoryAsync`, `SettingsAsync`, `UpdateSettingsAsync` |
 | Withdrawals (read-only) | `client.Withdrawals` | `InfoAsync`, `HistoryAsync` |
 | Static-deposit history | `client.StaticDeposits` | `InfoAsync`, `HistoryAsync` |
 | On-chain queries | `client.Blockchain` | `ContractsAvailableAsync`, `WalletBalanceAsync`, `TransactionStatusAsync` |
@@ -605,6 +605,33 @@ The constants live in `CryptoChief.Processing.Chains.Chain`.
 **How do I avoid floating-point rounding bugs with crypto amounts?**
 Never use `double`. Convert with `Amount.HumanToBase` / `Amount.BaseToHuman`,
 which are backed by `System.Numerics.BigInteger`.
+
+## Auto-sweep settings
+
+A deposit wallet is swept to your master wallet on a policy: as soon as funds arrive, once
+the balance reaches an amount, or never on its own (a force sweep still works).
+
+```csharp
+var s = await client.Sweeps.UpdateSettingsAsync(depositAddress,
+    typeWork: SweepFieldWrite.Set(SweepPolicyMode.Threshold),
+    thresholdAmountUsd: SweepFieldWrite.Set("250"));
+
+Console.WriteLine(s.Effective.TypeWork);  // what will actually happen
+Console.WriteLine(s.Effective.Source);    // which layer decided it
+```
+
+`SettingsAsync` comes back in three layers — `Effective` (what will happen), `Override`
+(what this wallet decides for itself) and `ProjectDefault` (what it falls back to) —
+because only the three together say whether a value is yours or inherited.
+
+Inheritance is per field: writing the mode leaves the fee mode inherited. A null argument
+leaves a field alone; `SweepFieldWrite.Inherit` stops overriding it.
+
+A sweep is broadcast first and confirmed after: `SweepStatus.Broadcasted` means the
+transaction is out and not yet confirmed, `SweepStatus.Completed` means confirmed, with
+`SweepConfirmations` and `CompletedAt` filled in. Earlier platform versions reported
+`completed` at broadcast, so a sweep could read as settled while its transaction was still
+unconfirmed.
 
 ## Documentation
 

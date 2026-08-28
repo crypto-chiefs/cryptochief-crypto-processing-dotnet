@@ -23,6 +23,27 @@ public sealed record CreatePayInRequest
     public required string UserId { get; init; }
     public required string Mode { get; init; }
     public string? ToAddress { get; init; }
+
+    /// <summary>
+    /// Pin the transit deposit wallet of THIS order to the given master wallet of the
+    /// project - the address the funds are swept to. The order's asset/network chain family
+    /// must match the master wallet's; a foreign or mismatched address is rejected with 400.
+    /// Omit for the project-default behaviour.
+    /// </summary>
+    public string? MasterWalletAddress { get; init; }
+
+    /// <summary>
+    /// Constrain the asset the platform PICKS for this order to the real chains or the test
+    /// ones - a value of <see cref="Environment"/>. Omit to use the project's own default.
+    /// </summary>
+    /// <remarks>
+    /// It changes nothing when <see cref="Asset"/> names a concrete network - that is the
+    /// caller's choice. It matters in fiat mode and when the network is ANY, where the
+    /// platform selects the asset and an unconstrained pick could put a real payment on a
+    /// test network.
+    /// </remarks>
+    public string? Environment { get; init; }
+
     public int? LifetimeSec { get; init; }
     public string? UrlCallback { get; init; }
     public string? UrlSuccess { get; init; }
@@ -86,6 +107,13 @@ public sealed record SelectAssetRequest
     public required string Uuid { get; init; }
     public required string Coin { get; init; }
     public required string Network { get; init; }
+
+    /// <summary>
+    /// Pin the order's transit deposit wallet to the given project master wallet; see
+    /// <see cref="CreatePayInRequest.MasterWalletAddress"/>. A value here overrides one
+    /// supplied at order create.
+    /// </summary>
+    public string? MasterWalletAddress { get; init; }
 }
 
 public sealed record PayInHistoryResponse
