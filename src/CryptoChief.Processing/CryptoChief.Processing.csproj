@@ -12,7 +12,7 @@
 
   <PropertyGroup Label="NuGet">
     <PackageId>CryptoChief.Processing</PackageId>
-    <Version>0.4.0</Version>
+    <Version>0.4.1</Version>
     <Authors>Crypto Chief</Authors>
     <Company>Crypto Chief</Company>
     <Product>Crypto Chief Processing .NET SDK</Product>

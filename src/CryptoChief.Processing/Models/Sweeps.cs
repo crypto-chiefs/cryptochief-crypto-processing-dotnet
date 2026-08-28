@@ -60,8 +60,11 @@ public static class SweepFeeMode
 /// permit it is refused with <c>TESTNET_NOT_ALLOWED</c> rather than quietly served on
 /// mainnet, and a value that is neither is <c>ENVIRONMENT_INVALID</c> rather than a silent
 /// fallback.
+/// <para>Named <c>PayInEnvironment</c> rather than <c>Environment</c> on purpose: this
+/// namespace is imported wholesale, and a type called <c>Environment</c> would collide with
+/// <see cref="System.Environment"/> in every file that does so.</para>
 /// </remarks>
-public static class Environment
+public static class PayInEnvironment
 {
     public const string Mainnet = "mainnet";
     public const string Testnet = "testnet";

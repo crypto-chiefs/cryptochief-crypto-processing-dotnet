@@ -118,7 +118,7 @@ public class SweepsTests
             Mode = PayInMode.Fiat,
             AmountFiat = "10",
             Currency = "USD",
-            Environment = CryptoChief.Processing.Models.Environment.Testnet,
+            Environment = PayInEnvironment.Testnet,
         });
         JsonDocument.Parse(handler.CapturedBodies[0]).RootElement
             .GetProperty("environment").GetString().Should().Be("testnet");

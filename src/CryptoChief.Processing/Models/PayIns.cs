@@ -34,7 +34,7 @@ public sealed record CreatePayInRequest
 
     /// <summary>
     /// Constrain the asset the platform PICKS for this order to the real chains or the test
-    /// ones - a value of <see cref="Environment"/>. Omit to use the project's own default.
+    /// ones - a value of <see cref="PayInEnvironment"/>. Omit to use the project's own default.
     /// </summary>
     /// <remarks>
     /// It changes nothing when <see cref="Asset"/> names a concrete network - that is the
