@@ -96,7 +96,7 @@ named handlers) you add downstream.
 | Solana programs | `client.Transactions` | `SignAnchorCallAsync`, `SignSolanaCallAsync` |
 | TON contract calls (Jetton / NFT / text) | `client.Transactions` | `JettonTransferAsync`, `NftTransferAsync`, `SendTonCommentAsync`, `SignTonCallAsync` |
 | Accept incoming payments | `client.PayIns` | `CreateAsync`, `SelectAssetAsync`, `ResetAssetAsync`, `CancelAsync`, `InfoAsync`, `HistoryAsync` |
-| Wallet management + RSA decrypt | `client.Wallets` | `GenerateAsync`, `ListAsync`, `InfoAsync`, `FreezeAsync`, `DecryptPrivateKey` |
+| Wallet management + RSA decrypt | `client.Wallets` | `GenerateAsync`, `ListAsync`, `InfoAsync`, `FreezeAsync`, `RebindMasterAsync`, `SetCallbackUrlAsync`, `DecryptPrivateKey` |
 | Treasury sweeps | `client.Sweeps` | `ForceAsync`, `HistoryAsync`, `WalletHistoryAsync`, `SettingsAsync`, `UpdateSettingsAsync` |
 | Withdrawals (read-only) | `client.Withdrawals` | `InfoAsync`, `HistoryAsync` |
 | Static-deposit history | `client.StaticDeposits` | `InfoAsync`, `HistoryAsync` |
@@ -423,6 +423,7 @@ var w = await client.Wallets.GenerateAsync(new GenerateWalletRequest
 {
     WalletType  = WalletType.Master,
     ChainFamily = ChainFamily.Evm,
+    Label       = "Treasury EU",   // optional, up to 255 chars, any wallet type
 });
 
 // w.PrivateKeyEncrypted is base64 RSA-OAEP / SHA-256 ciphertext.
@@ -436,6 +437,45 @@ default) and PKCS#8 (`-----BEGIN PRIVATE KEY-----`).
 If you skip the option, `WalletsService.DecryptPrivateKey` throws a
 `CryptoChiefException` and the rest of the SDK continues to work —
 decryption is purely opt-in.
+
+## Re-pointing a wallet at another master
+
+A transit or static wallet can be moved to another master wallet of the same
+project after it exists:
+
+```csharp
+var w = await client.Wallets.RebindMasterAsync(depositAddress, newMasterAddress);
+Console.WriteLine(w.MasterWalletAddress);  // the master it now sweeps to
+```
+
+This moves no money. It changes where the *next* sweep settles — including
+sweeps already queued, which will land on the new master — while anything
+already swept stays on the previous one.
+
+It is idempotent: a wallet already bound to that master answers 200 and
+changes nothing. Master wallets cannot be re-pointed, and the new master must
+be of the same chain family and not frozen.
+
+## Changing a static wallet's deposit webhook
+
+`CallbackUrl` can be set at generation time, and rewritten or cleared
+afterwards:
+
+```csharp
+await client.Wallets.SetCallbackUrlAsync(staticAddress, "https://your.app/hooks/deposit");
+
+// Clearing it is an empty string, not a null — the SDK sends "" on the wire.
+var w = await client.Wallets.SetCallbackUrlAsync(staticAddress, "");
+Console.WriteLine(w.CallbackUrl is null);  // True
+```
+
+Static wallets only — master and transit wallets are refused with 400. A
+deposit already announced is not announced again to the new URL.
+
+Both methods return the wallet-info shape, where `MasterWalletAddress` and
+`CallbackUrl` are always present and `null` when the wallet has no such value
+— never an empty string, never an absent key. A transit wallet always reads
+`CallbackUrl is null`.
 
 ## Webhooks
 
@@ -599,6 +639,11 @@ ABI-encodes the `data` field for you.
 `client.Transactions.JettonTransferAsync(...)` — pass the Jetton master,
 recipient, and amount; the sender's Jetton wallet address and gas budget are
 resolved automatically.
+
+**How do I move a deposit wallet to a different master wallet?**
+`client.Wallets.RebindMasterAsync(address, newMaster)` — it re-points where the
+next sweep settles (queued sweeps included) without moving anything already
+swept. Transit and static wallets only.
 
 **How do I verify a Crypto Chief webhook signature?**
 `WebhookVerifier.Verify(apiKey, body, signature)` or

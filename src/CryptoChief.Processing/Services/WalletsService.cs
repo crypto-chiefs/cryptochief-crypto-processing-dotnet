@@ -27,6 +27,59 @@ public sealed class WalletsService
             "/v1/wallets/freeze", new { address }, cancellationToken);
 
     /// <summary>
+    /// Re-point a transit or static wallet at another master wallet of the same project.
+    /// Returns the wallet as it stands afterwards.
+    /// </summary>
+    /// <remarks>
+    /// This moves no money. It changes where the next sweep settles — including sweeps
+    /// already queued, which will land on the new master — while anything already swept
+    /// stays on the previous one.
+    /// <para>Idempotent: a wallet already bound to that master answers 200 and changes
+    /// nothing. A master wallet cannot be re-pointed, and the new master must be of the
+    /// same chain family and not frozen.</para>
+    /// </remarks>
+    /// <param name="address">The transit or static wallet to re-point.</param>
+    /// <param name="masterWalletAddress">The master wallet it should sweep to from now on.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    public Task<Wallet> RebindMasterAsync(
+        string address,
+        string masterWalletAddress,
+        CancellationToken cancellationToken = default) =>
+        _client.Transport.SendAsync<Wallet>(
+            "/v1/wallets/rebind-master",
+            new { address, master_wallet_address = masterWalletAddress },
+            cancellationToken);
+
+    /// <summary>
+    /// Set or clear the deposit webhook of a static wallet after it was created. Returns
+    /// the wallet as it stands afterwards.
+    /// </summary>
+    /// <remarks>
+    /// An empty <paramref name="callbackUrl"/> clears the webhook. That is a value, not an
+    /// omission, so it goes on the wire as <c>"callback_url": ""</c> rather than being left
+    /// out — the two say different things to the platform.
+    /// <para>Static wallets only: master and transit wallets are refused with 400. A
+    /// deposit already announced is not announced again to the new URL.</para>
+    /// </remarks>
+    /// <param name="address">The static wallet whose webhook is being written.</param>
+    /// <param name="callbackUrl">The new webhook URL, or an empty string to clear it.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    public Task<Wallet> SetCallbackUrlAsync(
+        string address,
+        string callbackUrl,
+        CancellationToken cancellationToken = default) =>
+        _client.Transport.SendAsync<Wallet>(
+            "/v1/wallets/callback-url",
+            new
+            {
+                address,
+                // Never null: null would be dropped from the body by the serializer, and an
+                // absent callback_url is not the "clear it" the caller asked for.
+                callback_url = string.IsNullOrEmpty(callbackUrl) ? string.Empty : callbackUrl,
+            },
+            cancellationToken);
+
+    /// <summary>
     /// Decrypt <see cref="Wallet.PrivateKeyEncrypted"/> with the RSA private key
     /// configured on the client. Returns the chain-native hex private key.
     /// </summary>
