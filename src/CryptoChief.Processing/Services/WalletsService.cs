@@ -80,6 +80,36 @@ public sealed class WalletsService
             cancellationToken);
 
     /// <summary>
+    /// Set or clear the human-readable name of a wallet after it was created. Returns the
+    /// wallet as it stands afterwards.
+    /// </summary>
+    /// <remarks>
+    /// An empty <paramref name="label"/> clears the name. That is a value, not an omission,
+    /// so it goes on the wire as <c>"label": ""</c> rather than being left out — the two say
+    /// different things to the platform.
+    /// <para>Every wallet type can be renamed — master, transit and static alike — unlike
+    /// the deposit webhook, which is static-only. A name over 255 characters is refused with
+    /// <c>LABEL_TOO_LONG</c>.</para>
+    /// </remarks>
+    /// <param name="address">The wallet being renamed.</param>
+    /// <param name="label">The new name, or an empty string to clear it.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    public Task<Wallet> SetLabelAsync(
+        string address,
+        string label,
+        CancellationToken cancellationToken = default) =>
+        _client.Transport.SendAsync<Wallet>(
+            "/v1/wallets/label",
+            new
+            {
+                address,
+                // Never null: null would be dropped from the body by the serializer, and an
+                // absent label is not the "clear it" the caller asked for.
+                label = string.IsNullOrEmpty(label) ? string.Empty : label,
+            },
+            cancellationToken);
+
+    /// <summary>
     /// Decrypt <see cref="Wallet.PrivateKeyEncrypted"/> with the RSA private key
     /// configured on the client. Returns the chain-native hex private key.
     /// </summary>

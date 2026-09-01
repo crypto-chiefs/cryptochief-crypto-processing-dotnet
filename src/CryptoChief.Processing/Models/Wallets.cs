@@ -73,6 +73,20 @@ public sealed record Wallet
     /// </remarks>
     public string? CallbackUrl { get; init; }
 
+    /// <summary>
+    /// The wallet's human-readable name, or null when it has none. Every wallet type carries
+    /// one — master, transit and static alike. Set it at generation time with
+    /// <see cref="GenerateWalletRequest.Label"/>, change it with
+    /// <c>WalletsService.SetLabelAsync</c>.
+    /// </summary>
+    /// <remarks>
+    /// Null is an answer, not a gap: the API always sends the key and uses null for
+    /// "unnamed", never an empty string and never an absent key. It rides on every response
+    /// that describes a wallet — generation, info, the list, and what rebind-master,
+    /// callback-url and label themselves return.
+    /// </remarks>
+    public string? Label { get; init; }
+
     /// <summary>Base64 RSA-OAEP/SHA-256 ciphertext. Decrypt via <c>WalletsService.DecryptPrivateKey</c>.</summary>
     public string? PrivateKeyEncrypted { get; init; }
 

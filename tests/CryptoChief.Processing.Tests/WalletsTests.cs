@@ -12,22 +12,27 @@ public class WalletsTests
 {
     private const string StaticWalletBody =
         "{\"type\":\"static\",\"address\":\"0xdead\",\"chain_family\":\"EVM\",\"frozen\":false,"
-        + "\"master_wallet_address\":\"0xbeef\",\"callback_url\":\"https://shop.test/hooks/deposit\"}";
+        + "\"master_wallet_address\":\"0xbeef\",\"callback_url\":\"https://shop.test/hooks/deposit\","
+        + "\"label\":\"Shop EU\"}";
 
     [Fact]
     public async Task Generate_sends_the_label_and_omits_it_when_unset()
     {
         var handler = new CapturingHandler(_ => Resp(HttpStatusCode.OK,
             "{\"type\":\"master\",\"address\":\"0xbeef\",\"chain_family\":\"EVM\",\"frozen\":false,"
-            + "\"master_wallet_address\":null,\"callback_url\":null}"));
+            + "\"master_wallet_address\":null,\"callback_url\":null,\"label\":\"Treasury EU\"}"));
         var client = NewClient(handler);
 
-        await client.Wallets.GenerateAsync(new GenerateWalletRequest
+        var created = await client.Wallets.GenerateAsync(new GenerateWalletRequest
         {
             WalletType  = WalletType.Master,
             ChainFamily = ChainFamily.Evm,
             Label       = "Treasury EU",
         });
+
+        // Generation answers with the name it stored, so a bulk create no longer hands back
+        // a list of items indistinguishable from each other.
+        created.Label.Should().Be("Treasury EU");
 
         var req = handler.Captured.Should().ContainSingle().Subject;
         req.Method.Should().Be(HttpMethod.Post);
@@ -43,12 +48,14 @@ public class WalletsTests
 
         var handler2 = new CapturingHandler(_ => Resp(HttpStatusCode.OK,
             "{\"type\":\"master\",\"address\":\"0xbeef\",\"chain_family\":\"EVM\",\"frozen\":false,"
-            + "\"master_wallet_address\":null,\"callback_url\":null}"));
-        await NewClient(handler2).Wallets.GenerateAsync(new GenerateWalletRequest
+            + "\"master_wallet_address\":null,\"callback_url\":null,\"label\":null}"));
+        var unnamed = await NewClient(handler2).Wallets.GenerateAsync(new GenerateWalletRequest
         {
             WalletType  = WalletType.Master,
             ChainFamily = ChainFamily.Evm,
         });
+
+        unnamed.Label.Should().BeNull();
 
         // Unnamed must stay off the wire: "" is a name of no characters the platform has
         // to reject, not the "no name" the caller meant.
@@ -80,6 +87,7 @@ public class WalletsTests
         wallet.Frozen.Should().BeFalse();
         wallet.MasterWalletAddress.Should().Be("0xbeef");
         wallet.CallbackUrl.Should().Be("https://shop.test/hooks/deposit");
+        wallet.Label.Should().Be("Shop EU");
     }
 
     [Fact]
@@ -108,7 +116,7 @@ public class WalletsTests
     {
         var handler = new CapturingHandler(_ => Resp(HttpStatusCode.OK,
             "{\"type\":\"static\",\"address\":\"0xdead\",\"chain_family\":\"EVM\",\"frozen\":false,"
-            + "\"master_wallet_address\":\"0xbeef\",\"callback_url\":null}"));
+            + "\"master_wallet_address\":\"0xbeef\",\"callback_url\":null,\"label\":\"Shop EU\"}"));
         var client = NewClient(handler);
 
         var wallet = await client.Wallets.SetCallbackUrlAsync("0xdead", "");
@@ -126,13 +134,62 @@ public class WalletsTests
     }
 
     [Fact]
+    public async Task SetLabel_writes_the_name_of_any_wallet_type()
+    {
+        // A master wallet: the label endpoint takes every type, unlike callback-url.
+        var handler = new CapturingHandler(_ => Resp(HttpStatusCode.OK,
+            "{\"type\":\"master\",\"address\":\"0xbeef\",\"chain_family\":\"EVM\",\"frozen\":false,"
+            + "\"master_wallet_address\":null,\"callback_url\":null,\"label\":\"Treasury EU\"}"));
+        var client = NewClient(handler);
+
+        var wallet = await client.Wallets.SetLabelAsync("0xbeef", "Treasury EU");
+
+        var req = handler.Captured.Should().ContainSingle().Subject;
+        req.Method.Should().Be(HttpMethod.Post);
+        req.RequestUri!.AbsolutePath.Should().Be("/v1/wallets/label");
+        req.Headers.GetValues("Merchant").Should().ContainSingle().Which.Should().Be("M-1");
+
+        // Exactly the two fields, and nothing else rides along.
+        const string wire = "{\"address\":\"0xbeef\",\"label\":\"Treasury EU\"}";
+        handler.CapturedBodies.Should().ContainSingle().Which.Should().Be(wire);
+        req.Headers.GetValues("Signature").Single().Should()
+            .Be(RequestSigner.Sign(Encoding.UTF8.GetBytes(wire), "K-1"));
+
+        wallet.Type.Should().Be(WalletType.Master);
+        wallet.Label.Should().Be("Treasury EU");
+    }
+
+    [Fact]
+    public async Task SetLabel_sends_an_empty_string_rather_than_omitting_the_field()
+    {
+        var handler = new CapturingHandler(_ => Resp(HttpStatusCode.OK,
+            "{\"type\":\"static\",\"address\":\"0xdead\",\"chain_family\":\"EVM\",\"frozen\":false,"
+            + "\"master_wallet_address\":\"0xbeef\",\"callback_url\":null,\"label\":null}"));
+        var client = NewClient(handler);
+
+        var wallet = await client.Wallets.SetLabelAsync("0xdead", "");
+
+        // "" is the instruction to clear the name. Omitting the key says nothing at all, so
+        // the empty string has to survive the serializer's null-dropping and reach the wire
+        // — and the signature is over exactly that body.
+        const string wire = "{\"address\":\"0xdead\",\"label\":\"\"}";
+        handler.CapturedBodies.Should().ContainSingle().Which.Should().Be(wire);
+        handler.Captured[0].Headers.GetValues("Signature").Single().Should()
+            .Be(RequestSigner.Sign(Encoding.UTF8.GetBytes(wire), "K-1"));
+
+        // Cleared comes back as null, never as "".
+        wallet.Label.Should().BeNull();
+    }
+
+    [Fact]
     public async Task Explicit_nulls_in_the_wallet_shape_decode_to_null()
     {
-        // A master wallet: no master of its own, and no deposit webhook. The API sends both
-        // keys with null rather than dropping them, and neither may blow up the decoder.
+        // A master wallet: no master of its own, no deposit webhook, no name. The API sends
+        // all three keys with null rather than dropping them, and none may blow up the
+        // decoder.
         var handler = new CapturingHandler(_ => Resp(HttpStatusCode.OK,
             "{\"type\":\"master\",\"address\":\"0xbeef\",\"chain_family\":\"EVM\",\"frozen\":true,"
-            + "\"master_wallet_address\":null,\"callback_url\":null}"));
+            + "\"master_wallet_address\":null,\"callback_url\":null,\"label\":null}"));
         var client = NewClient(handler);
 
         var wallet = await client.Wallets.InfoAsync("0xbeef");
@@ -142,15 +199,39 @@ public class WalletsTests
         wallet.MasterWalletAddress.Should().BeNull();
         wallet.CallbackUrl.Should().BeNull();
 
-        // A transit wallet always has callback_url null, master_wallet_address set.
+        // Unnamed reads as null, never as "".
+        wallet.Label.Should().BeNull();
+
+        // A transit wallet always has callback_url null, master_wallet_address set. It can
+        // still carry a name.
         var handler2 = new CapturingHandler(_ => Resp(HttpStatusCode.OK,
             "{\"type\":\"transit\",\"address\":\"0xcafe\",\"chain_family\":\"EVM\",\"frozen\":false,"
-            + "\"master_wallet_address\":\"0xbeef\",\"callback_url\":null}"));
+            + "\"master_wallet_address\":\"0xbeef\",\"callback_url\":null,\"label\":\"Payouts\"}"));
         var transit = await NewClient(handler2).Wallets.RebindMasterAsync("0xcafe", "0xbeef");
 
         transit.Type.Should().Be(WalletType.Transit);
         transit.MasterWalletAddress.Should().Be("0xbeef");
         transit.CallbackUrl.Should().BeNull();
+        transit.Label.Should().Be("Payouts");
+    }
+
+    [Fact]
+    public async Task List_carries_the_label_of_every_item()
+    {
+        // The list is where the name earns its keep: without it the items are told apart
+        // only by address.
+        var handler = new CapturingHandler(_ => Resp(HttpStatusCode.OK,
+            "{\"items\":["
+            + "{\"type\":\"master\",\"address\":\"0xbeef\",\"chain_family\":\"EVM\",\"frozen\":false,"
+            + "\"master_wallet_address\":null,\"callback_url\":null,\"label\":\"Treasury EU\"},"
+            + "{\"type\":\"static\",\"address\":\"0xdead\",\"chain_family\":\"EVM\",\"frozen\":false,"
+            + "\"master_wallet_address\":\"0xbeef\",\"callback_url\":null,\"label\":null}]}"));
+
+        var list = await NewClient(handler).Wallets.ListAsync();
+
+        list.Items.Should().HaveCount(2);
+        list.Items[0].Label.Should().Be("Treasury EU");
+        list.Items[1].Label.Should().BeNull();
     }
 
     private static HttpResponseMessage Resp(HttpStatusCode code, string body) =>

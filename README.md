@@ -96,7 +96,7 @@ named handlers) you add downstream.
 | Solana programs | `client.Transactions` | `SignAnchorCallAsync`, `SignSolanaCallAsync` |
 | TON contract calls (Jetton / NFT / text) | `client.Transactions` | `JettonTransferAsync`, `NftTransferAsync`, `SendTonCommentAsync`, `SignTonCallAsync` |
 | Accept incoming payments | `client.PayIns` | `CreateAsync`, `SelectAssetAsync`, `ResetAssetAsync`, `CancelAsync`, `InfoAsync`, `HistoryAsync` |
-| Wallet management + RSA decrypt | `client.Wallets` | `GenerateAsync`, `ListAsync`, `InfoAsync`, `FreezeAsync`, `RebindMasterAsync`, `SetCallbackUrlAsync`, `DecryptPrivateKey` |
+| Wallet management + RSA decrypt | `client.Wallets` | `GenerateAsync`, `ListAsync`, `InfoAsync`, `FreezeAsync`, `RebindMasterAsync`, `SetCallbackUrlAsync`, `SetLabelAsync`, `DecryptPrivateKey` |
 | Treasury sweeps | `client.Sweeps` | `ForceAsync`, `HistoryAsync`, `WalletHistoryAsync`, `SettingsAsync`, `UpdateSettingsAsync` |
 | Withdrawals (read-only) | `client.Withdrawals` | `InfoAsync`, `HistoryAsync` |
 | Static-deposit history | `client.StaticDeposits` | `InfoAsync`, `HistoryAsync` |
@@ -472,10 +472,37 @@ Console.WriteLine(w.CallbackUrl is null);  // True
 Static wallets only — master and transit wallets are refused with 400. A
 deposit already announced is not announced again to the new URL.
 
-Both methods return the wallet-info shape, where `MasterWalletAddress` and
-`CallbackUrl` are always present and `null` when the wallet has no such value
-— never an empty string, never an absent key. A transit wallet always reads
-`CallbackUrl is null`.
+## Naming a wallet
+
+`Label` can be set at generation time, and renamed or cleared afterwards. It
+applies to every wallet type — master, transit and static alike — unlike the
+deposit webhook, which is static-only:
+
+```csharp
+await client.Wallets.SetLabelAsync(masterAddress, "Treasury EU");
+
+// Clearing the name is an empty string, not a null — the SDK sends "" on the wire.
+var w = await client.Wallets.SetLabelAsync(masterAddress, "");
+Console.WriteLine(w.Label is null);  // True
+```
+
+Up to 255 characters; longer is refused with `LABEL_TOO_LONG`.
+
+`Label` comes back on every response that describes a wallet — generation,
+info, the list, and what rebind-master, callback-url and label themselves
+return — so a bulk create no longer hands back items you can only tell apart
+by address:
+
+```csharp
+var wallets = await client.Wallets.ListAsync();
+foreach (var wallet in wallets.Items)
+    Console.WriteLine($"{wallet.Label ?? "(unnamed)"} — {wallet.Address}");
+```
+
+All three methods return the wallet-info shape, where `MasterWalletAddress`,
+`CallbackUrl` and `Label` are always present and `null` when the wallet has no
+such value — never an empty string, never an absent key. A transit wallet
+always reads `CallbackUrl is null`.
 
 ## Webhooks
 
@@ -644,6 +671,12 @@ resolved automatically.
 `client.Wallets.RebindMasterAsync(address, newMaster)` — it re-points where the
 next sweep settles (queued sweeps included) without moving anything already
 swept. Transit and static wallets only.
+
+**How do I give a wallet a human-readable name?**
+`client.Wallets.SetLabelAsync(address, "Treasury EU")`, or `Label` on
+`GenerateWalletRequest` at creation time. Every wallet type takes one, and
+`Wallet.Label` is returned by every call that describes a wallet — passing `""`
+clears the name.
 
 **How do I verify a Crypto Chief webhook signature?**
 `WebhookVerifier.Verify(apiKey, body, signature)` or
