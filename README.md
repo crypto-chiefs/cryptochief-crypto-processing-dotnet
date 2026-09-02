@@ -96,12 +96,12 @@ named handlers) you add downstream.
 | Solana programs | `client.Transactions` | `SignAnchorCallAsync`, `SignSolanaCallAsync` |
 | TON contract calls (Jetton / NFT / text) | `client.Transactions` | `JettonTransferAsync`, `NftTransferAsync`, `SendTonCommentAsync`, `SignTonCallAsync` |
 | Accept incoming payments | `client.PayIns` | `CreateAsync`, `SelectAssetAsync`, `ResetAssetAsync`, `CancelAsync`, `InfoAsync`, `HistoryAsync` |
-| Wallet management + RSA decrypt | `client.Wallets` | `GenerateAsync`, `ListAsync`, `InfoAsync`, `FreezeAsync`, `RebindMasterAsync`, `SetCallbackUrlAsync`, `SetLabelAsync`, `DecryptPrivateKey` |
+| Wallet management + RSA decrypt | `client.Wallets` | `GenerateAsync`, `ListAsync`, `InfoAsync`, `HistoryAsync`, `FreezeAsync`, `RebindMasterAsync`, `SetCallbackUrlAsync`, `SetLabelAsync`, `DecryptPrivateKey` |
 | Treasury sweeps | `client.Sweeps` | `ForceAsync`, `HistoryAsync`, `WalletHistoryAsync`, `SettingsAsync`, `UpdateSettingsAsync` |
 | Withdrawals (read-only) | `client.Withdrawals` | `InfoAsync`, `HistoryAsync` |
 | Static-deposit history | `client.StaticDeposits` | `InfoAsync`, `HistoryAsync` |
-| On-chain queries | `client.Blockchain` | `ContractsAvailableAsync`, `WalletBalanceAsync`, `TransactionStatusAsync` |
-| Fiat ↔ crypto rate quote | `client.Currencies` | `FiatToCryptoAsync`, `CryptoToFiatAsync` |
+| On-chain queries | `client.Blockchain` | `ContractsAvailableAsync`, `ContractsListAsync`, `BlockchainsListAsync`, `WalletBalanceAsync`, `TransactionStatusAsync` |
+| Fiat ↔ crypto rates and catalogues | `client.Currencies` | `FiatToCryptoAsync`, `CryptoToFiatAsync`, `FiatsAsync`, `CryptosAsync` |
 | Credits balance & top-up (billing-exempt) | `client.Credits` | `BalanceAsync`, `TopupAsync` |
 
 ## Payout with confirmation
@@ -685,6 +685,26 @@ swept. Transit and static wallets only.
 `Wallet.Label` is returned by every call that describes a wallet — passing `""`
 clears the name.
 
+**A payer says they sent funds and I only have the address — which order was it?**
+`client.Wallets.HistoryAsync(new WalletHistoryQuery { Address = address })` returns the
+pay-ins that used that deposit address, as the same `PayIn` records and `Meta` block
+`client.PayIns.HistoryAsync` gives you. A deposit wallet serves several orders over its
+lifetime, so this is a page of them. The address is matched case-insensitively, and one
+your project does not own yields an empty page rather than an error.
+
+**Which assets could we turn on, and which are enabled right now?**
+`client.Blockchain.ContractsListAsync()` is the platform-wide catalogue — every coin and
+token on every network; `ContractsAvailableAsync()` is what your project can actually be
+paid in. Both hand back the same item, so read `ChainFamily` and `IsTest` to tell a
+testnet asset from a live one, and expect `Contract` to be `""` (not null) on a native
+coin.
+
+**Which fiat currencies and crypto tickers can I quote against?**
+`client.Currencies.FiatsAsync()` lists the fiat codes a pay-in or a rate quote accepts;
+`client.Currencies.CryptosAsync()` lists the crypto tickers the platform has a USDT rate
+for, with `ByExchange` naming which exchange each came from. Rate availability only — a
+ticker there is not a promise of deposits, sweeps or payouts in it.
+
 **How do I verify a Crypto Chief webhook signature?**
 `WebhookVerifier.Verify(apiKey, body, signature)` or
 `WebhookVerifier.VerifyAndDecode<T>(apiKey, body, signature)` for one-line
@@ -693,7 +713,9 @@ typed dispatch.
 **Which blockchains does the crypto processing API support?**
 Ethereum, BNB Smart Chain, Polygon, Tron, TON, Solana, Bitcoin, Litecoin,
 Dogecoin, XRP, Avalanche, Arbitrum, Optimism and more — 25 chains in total.
-The constants live in `CryptoChief.Processing.Chains.Chain`.
+The constants live in `CryptoChief.Processing.Chains.Chain`. For the live list — the
+chains the platform's scanner is connected to right now — call
+`client.Blockchain.BlockchainsListAsync()`.
 
 **How do I avoid floating-point rounding bugs with crypto amounts?**
 Never use `double`. Convert with `Amount.HumanToBase` / `Amount.BaseToHuman`,
@@ -718,13 +740,75 @@ Console.WriteLine(s.Effective.Source);    // which layer decided it
 because only the three together say whether a value is yours or inherited.
 
 Inheritance is per field: writing the mode leaves the fee mode inherited. A null argument
-leaves a field alone; `SweepFieldWrite.Inherit` stops overriding it.
+leaves a field alone; `SweepFieldWrite.Inherit` stops overriding it — the field is named in
+the `fields` mask with no value, which is the only way to clear one and keep the others.
+The mask covers `type_work`, `threshold_amount_usd`, `fee_mode` and `gas_source`.
+
+### Who funds the gas
+
+A deposit wallet holding enough of the chain's native coin pays for its own transfer
+whatever the mode is — `fee_mode` only decides who covers a shortfall.
+
+| Constant | Who covers the shortfall |
+| --- | --- |
+| `SweepFeeMode.Client` | Your own master wallet. |
+| `SweepFeeMode.Service` | The platform — and the cost is billed to your API credits. |
+| `SweepFeeMode.Mix` | **The default.** `client` first, falling back to `service` when the master wallet cannot cover it. |
+
+### Who buys the energy on TRON
+
+`gas_source` says *what is bought* for a TRON transfer where `fee_mode` says *who covers
+the network fees* — the two are independent, and the energy is billed to your API credits
+under any fee mode.
+
+```csharp
+var s = await client.Sweeps.SettingsAsync(new SweepSettingsQuery { Address = tronAddress });
+
+Console.WriteLine(s.Effective.GasSource);  // always concrete — what will actually happen
+Console.WriteLine(s.Override?.GasSource);  // null = this layer does not decide
+```
+
+**Not setting it is not the same as setting `native`.** A wallet that has never chosen a
+`gas_source` gets the platform default, `SweepGasSource.Rented` — so energy is supplied,
+and billed to your credits, without anybody having switched it on. A `null` in `Override`
+means only that the layer does not decide; the value is inherited, not off. To have the
+wallet burn its own TRX, write it explicitly:
+
+```csharp
+await client.Sweeps.UpdateSettingsAsync(tronAddress,
+    gasSource: SweepFieldWrite.Set(SweepGasSource.Native));
+```
+
+Carried and ignored on every chain other than TRON.
+
+### Finding one sweep again
+
+Both history calls take `Status` (one `SweepStatus`) and `Search` (substring). Leaving
+`Status` out includes every status — the `SweepStatus.Skipped` ones among them, which is
+where a sweep that never happened is hiding.
+
+```csharp
+var page = await client.Sweeps.HistoryAsync(new SweepHistoryQuery
+{
+    Status = SweepStatus.Failed,
+    Search = "0x77EDde",       // wallet address, either tx hash, or the task id
+});
+```
+
+On `WalletHistoryAsync` the wallet is already fixed by `Address`, so `Search` matches the
+transaction hashes and the task id.
 
 A sweep is broadcast first and confirmed after: `SweepStatus.Broadcasted` means the
 transaction is out and not yet confirmed, `SweepStatus.Completed` means confirmed, with
-`SweepConfirmations` and `CompletedAt` filled in. Earlier platform versions reported
-`completed` at broadcast, so a sweep could read as settled while its transaction was still
-unconfirmed.
+`SweepConfirmations` above zero. Earlier platform versions reported `completed` at
+broadcast, so a sweep could read as settled while its transaction was still unconfirmed —
+the confirmation count separates the two.
+
+**`CompletedAt` is not proof the sweep settled.** It is stamped whenever the sweep reached a
+terminal outcome, failures included, so a failed sweep carries one too — reading its
+presence as "the funds arrived" books a failure as money received. Check
+`SweepConfirmations > 0`, or take `ConfirmedAt` off the `sweep.confirmed` webhook, which
+exists as a separate field for exactly this reason.
 
 ## Documentation
 

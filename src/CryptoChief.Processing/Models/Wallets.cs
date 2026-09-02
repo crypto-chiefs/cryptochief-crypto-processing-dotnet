@@ -100,3 +100,33 @@ public sealed record ListWalletsResponse
 {
     public IReadOnlyList<Wallet> Items { get; init; } = Array.Empty<Wallet>();
 }
+
+/// <summary>
+/// The body of /v1/wallets/history — the pay-ins that used one deposit address.
+/// </summary>
+/// <remarks>
+/// A deposit wallet can serve several orders over its lifetime, so this is a page of orders
+/// rather than one. The answer is a <see cref="PayInHistoryResponse"/>: the same orders
+/// <c>PayInsService.HistoryAsync</c> returns, narrowed to this address.
+/// </remarks>
+public sealed record WalletHistoryQuery
+{
+    /// <summary>
+    /// The deposit address. Matched case-insensitively, so either spelling of an EVM
+    /// address works. An address the project does not own yields an empty page rather than
+    /// an error.
+    /// </summary>
+    public required string Address { get; init; }
+
+    /// <summary>Order creation date, from. Format <c>YYYY-MM-DDTHH:MM:SS±HH:MM</c>.</summary>
+    public string? DateFrom { get; init; }
+
+    /// <summary>Order creation date, to. Same format as <see cref="DateFrom"/>.</summary>
+    public string? DateTo { get; init; }
+
+    /// <summary>Page number. Default 1.</summary>
+    public int? Page { get; init; }
+
+    /// <summary>Orders per page. Default 20, maximum 100.</summary>
+    public int? PageSize { get; init; }
+}

@@ -21,6 +21,21 @@ public sealed class WalletsService
         _client.Transport.SendAsync<Wallet>(
             "/v1/wallets/info", new { address }, cancellationToken);
 
+    /// <summary>
+    /// Every pay-in that used one deposit address — the same orders
+    /// <c>PayInsService.HistoryAsync</c> returns, narrowed to a single wallet.
+    /// </summary>
+    /// <remarks>
+    /// Useful when a payer says they sent funds and you have the address but not the order:
+    /// a deposit wallet can serve several orders over its lifetime, and this is the list of
+    /// them.
+    /// <para>Only orders belonging to the project are returned — an address it does not own
+    /// yields an empty page rather than an error.</para>
+    /// </remarks>
+    public Task<PayInHistoryResponse> HistoryAsync(WalletHistoryQuery query, CancellationToken cancellationToken = default) =>
+        _client.Transport.SendAsync<PayInHistoryResponse>(
+            "/v1/wallets/history", query, cancellationToken);
+
     /// <summary>Toggles the frozen flag. Read <see cref="Wallet.Frozen"/> to know the new state.</summary>
     public Task<Wallet> FreezeAsync(string address, CancellationToken cancellationToken = default) =>
         _client.Transport.SendAsync<Wallet>(

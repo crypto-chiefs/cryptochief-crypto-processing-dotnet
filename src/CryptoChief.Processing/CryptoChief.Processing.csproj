@@ -12,7 +12,7 @@
 
   <PropertyGroup Label="NuGet">
     <PackageId>CryptoChief.Processing</PackageId>
-    <Version>0.6.0</Version>
+    <Version>0.7.0</Version>
     <Authors>Crypto Chief</Authors>
     <Company>Crypto Chief</Company>
     <Product>Crypto Chief Processing .NET SDK</Product>
@@ -29,7 +29,7 @@
     <PublishRepositoryUrl>true</PublishRepositoryUrl>
     <EmbedUntrackedSources>true</EmbedUntrackedSources>
     <DebugType>portable</DebugType>
-    <PackageReleaseNotes>Initial release. Full coverage of the Crypto Chief processing API: payouts (single + batch), two-phase sign/execute, EVM ABI encoder, TRON base58, Solana Anchor/Borsh, TON Jetton/NFT/comment helpers, RSA wallet decryption, webhook verification, polling helpers, DI extensions.</PackageReleaseNotes>
+    <PackageReleaseNotes>0.7.0 — Adds the endpoints the API documents and this SDK did not cover: wallet pay-in history, the supported-blockchains and platform-assets catalogues, the fiat and crypto currency lists, and the status/search filters on sweep history. Sweep settings gain gas_source, so a TRON wallet can be told to burn its own TRX instead of taking rented energy billed to your API credits. Fixes: gateway error codes now reach ApiException.Code, so ErrorCodes constants match; a bare-array endpoint answering an empty result yields an empty list rather than null; and the sweep fee modes and completed_at are documented as they actually behave — completed_at is stamped on failures too, so it is not proof a sweep settled.</PackageReleaseNotes>
   </PropertyGroup>
 
   <ItemGroup>

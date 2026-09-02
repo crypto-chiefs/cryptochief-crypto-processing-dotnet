@@ -234,6 +234,73 @@ public class WalletsTests
         list.Items[1].Label.Should().BeNull();
     }
 
+    [Fact]
+    public async Task History_returns_pay_in_orders_in_the_shape_pay_in_history_uses()
+    {
+        // Same records as PayIns.HistoryAsync, narrowed to one deposit address — so they
+        // decode into the same order and meta types, not a parallel pair.
+        var handler = new CapturingHandler(_ => Resp(HttpStatusCode.OK, """
+            {"items":[
+              {"uuid":"0a1b2c3d-4e5f-6789-abcd-ef0123456789","order_id":"invoice-1002",
+               "status":"paid","amount_crypto":"10.5","payment_coin":"USDT",
+               "payment_network":"TRON_MAINNET","to_address":"TQrY8bYc2yQ8sM8nJ1sZ9c2Zx7L2wq7pQb"},
+              {"uuid":"1b2c3d4e-5f67-89ab-cdef-0123456789ab","order_id":"invoice-1003",
+               "status":"expired","amount_crypto":"4","payment_coin":"USDT",
+               "payment_network":"TRON_MAINNET","to_address":"TQrY8bYc2yQ8sM8nJ1sZ9c2Zx7L2wq7pQb"}
+            ],"meta":{"page":1,"page_size":20,"total":2}}
+            """));
+        var client = NewClient(handler);
+
+        PayInHistoryResponse page = await client.Wallets.HistoryAsync(new WalletHistoryQuery
+        {
+            Address  = "TQrY8bYc2yQ8sM8nJ1sZ9c2Zx7L2wq7pQb",
+            DateFrom = "2026-08-01T00:00:00+00:00",
+            PageSize = 20,
+        });
+
+        var req = handler.Captured.Should().ContainSingle().Subject;
+        req.Method.Should().Be(HttpMethod.Post);
+        req.RequestUri!.AbsolutePath.Should().Be("/v1/wallets/history");
+
+        // Canonical body: snake_case keys sorted lexicographically, unset filters absent.
+        // The timezone offset's "+" reaches the wire as a U+002B escape — still the same
+        // JSON string to the platform, and the signature is over exactly these bytes.
+        const string wire = "{\"address\":\"TQrY8bYc2yQ8sM8nJ1sZ9c2Zx7L2wq7pQb\","
+            + "\"date_from\":\"2026-08-01T00:00:00\\u002B00:00\",\"page_size\":20}";
+        handler.CapturedBodies.Should().ContainSingle().Which.Should().Be(wire);
+        req.Headers.GetValues("Signature").Single().Should()
+            .Be(RequestSigner.Sign(Encoding.UTF8.GetBytes(wire), "K-1"));
+
+        // A deposit wallet serves several orders over its lifetime; this is the list.
+        page.Items.Should().HaveCount(2);
+        page.Items[0].OrderId.Should().Be("invoice-1002");
+        page.Items[0].Status.Should().Be(PayInStatus.Paid);
+        page.Items[0].Succeeded.Should().BeTrue();
+        page.Items[0].AmountCrypto.Should().Be("10.5");
+        page.Items[0].PaymentNetwork.Should().Be("TRON_MAINNET");
+        page.Items[1].Status.Should().Be(PayInStatus.Expired);
+        page.Items[1].IsTerminal.Should().BeTrue();
+        page.Meta.Page.Should().Be(1);
+        page.Meta.PageSize.Should().Be(20);
+        page.Meta.Total.Should().Be(2);
+    }
+
+    [Fact]
+    public async Task History_of_an_address_the_project_does_not_own_is_an_empty_page()
+    {
+        // Not an error: the platform answers 200 with nothing in it.
+        var handler = new CapturingHandler(_ => Resp(HttpStatusCode.OK,
+            "{\"items\":[],\"meta\":{\"page\":1,\"page_size\":20,\"total\":0}}"));
+
+        var page = await NewClient(handler).Wallets
+            .HistoryAsync(new WalletHistoryQuery { Address = "0xNotOurs" });
+
+        page.Items.Should().BeEmpty();
+        page.Meta.Total.Should().Be(0);
+        handler.CapturedBodies.Should().ContainSingle().Which
+            .Should().Be("{\"address\":\"0xNotOurs\"}");
+    }
+
     private static HttpResponseMessage Resp(HttpStatusCode code, string body) =>
         new(code) { Content = new ByteArrayContent(Encoding.UTF8.GetBytes(body))
             { Headers = { ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("application/json") } } };
