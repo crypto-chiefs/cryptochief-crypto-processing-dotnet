@@ -571,6 +571,13 @@ catch (CryptoChiefApiException ex)
 }
 ```
 
+`ex.Code` is always a machine code. The platform writes refusals in two
+envelope shapes — the code in `error` when the gateway refused the request
+itself, the code in `msg` when it relayed a refusal from a service behind it
+as `SERVICE_ERROR` — and the SDK resolves both to `Code`. The English
+sentence, where there is one, stays in `ex.Message`; `ex.RawBody` keeps the
+body as it arrived.
+
 `ex.IsRetryable` tells you whether the operation is plausibly transient
 (5xx, network).
 

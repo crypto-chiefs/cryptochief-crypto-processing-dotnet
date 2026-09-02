@@ -51,6 +51,93 @@ public class TransportTests
     }
 
     [Fact]
+    public async Task Gateway_envelope_puts_the_machine_code_in_Code()
+    {
+        var handler = new CapturingHandler(_ => Resp(HttpStatusCode.BadRequest,
+            "{\"ok\":false,\"error\":\"LABEL_TOO_LONG\","
+            + "\"msg\":\"label is longer than 255 characters\"}"));
+        var client = NewClient(handler);
+
+        var ex = await FluentActions
+            .Invoking(() => client.Wallets.SetLabelAsync("0xabc", new string('x', 256)))
+            .Should().ThrowAsync<CryptoChiefApiException>();
+
+        ex.Which.Code.Should().Be(ErrorCodes.LabelTooLong);
+        ex.Which.HttpStatus.Should().Be(HttpStatusCode.BadRequest);
+        // The sentence stays available as the human-readable half.
+        ex.Which.Message.Should().Contain("label is longer than 255 characters");
+        // Nothing is lost: the raw body still carries both fields.
+        ex.Which.RawBody.Should().Contain("LABEL_TOO_LONG")
+            .And.Contain("label is longer than 255 characters");
+    }
+
+    [Fact]
+    public async Task Gateway_code_matches_the_switch_a_caller_writes()
+    {
+        var handler = new CapturingHandler(_ => Resp(HttpStatusCode.BadRequest,
+            "{\"ok\":false,\"error\":\"LABEL_TOO_LONG\","
+            + "\"msg\":\"label is longer than 255 characters\"}"));
+        var client = NewClient(handler);
+
+        var branch = "none";
+        try
+        {
+            await client.Wallets.SetLabelAsync("0xabc", new string('x', 256));
+        }
+        catch (CryptoChiefApiException ex)
+        {
+            branch = ex.Code switch
+            {
+                ErrorCodes.LabelTooLong        => "label-too-long",
+                ErrorCodes.InsufficientFunds   => "insufficient-funds",
+                _                              => "unmatched",
+            };
+        }
+
+        branch.Should().Be("label-too-long");
+    }
+
+    [Fact]
+    public async Task Upstream_envelope_still_takes_the_code_from_msg()
+    {
+        var handler = new CapturingHandler(_ => Resp(HttpStatusCode.BadRequest,
+            "{\"ok\":false,\"error\":\"SERVICE_ERROR\",\"msg\":\"wallet_not_found\"}"));
+        var client = NewClient(handler);
+
+        var ex = await FluentActions
+            .Invoking(() => client.Wallets.SetLabelAsync("0xabc", "treasury"))
+            .Should().ThrowAsync<CryptoChiefApiException>();
+
+        ex.Which.Code.Should().Be("wallet_not_found");
+        ex.Which.Message.Should().Contain("wallet_not_found");
+    }
+
+    [Fact]
+    public async Task Envelope_without_msg_falls_back_to_error()
+    {
+        var handler = new CapturingHandler(_ => Resp(HttpStatusCode.BadRequest,
+            "{\"ok\":false,\"error\":\"SERVICE_ERROR\"}"));
+        var client = NewClient(handler);
+
+        var ex = await FluentActions.Invoking(() => client.Payouts.InfoAsync("u-1"))
+            .Should().ThrowAsync<CryptoChiefApiException>();
+
+        ex.Which.Code.Should().Be(ErrorCodes.ServiceError);
+    }
+
+    [Fact]
+    public async Task Bodyless_refusal_falls_back_to_the_http_status()
+    {
+        var handler = new CapturingHandler(_ => Resp(HttpStatusCode.BadGateway, ""));
+        var client = NewClient(handler);
+
+        var ex = await FluentActions.Invoking(() => client.Payouts.InfoAsync("u-1"))
+            .Should().ThrowAsync<CryptoChiefApiException>();
+
+        ex.Which.Code.Should().Be("HTTP_502");
+    }
+
+    [Fact]
     public async Task Retries_5xx_then_succeeds()
     {
         var attempts = 0;

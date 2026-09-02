@@ -148,13 +148,18 @@ internal sealed class CryptoChiefHttpTransport
         }
         catch (JsonException) { }
 
-        var code = !string.IsNullOrEmpty(msg) ? msg : error;
-        if (string.IsNullOrEmpty(code))
-            code = $"HTTP_{(int)status}";
+        // The gateway writes two envelope shapes. When it refuses a request itself the
+        // machine code is in "error" and "msg" is an English sentence; when it relays a
+        // refusal from an upstream service "error" is the generic SERVICE_ERROR marker
+        // and the machine code is in "msg". Resolve both to the code.
+        var code = !string.IsNullOrEmpty(error) && error != ErrorCodes.ServiceError
+            ? error
+            : msg;
+        if (string.IsNullOrEmpty(code)) code = error;
+        if (string.IsNullOrEmpty(code)) code = $"HTTP_{(int)status}";
 
-        var message = error;
-        if (!string.IsNullOrEmpty(msg) && msg != error)
-            message = msg;
+        // The sentence, where there is one, stays the human-readable message.
+        var message = !string.IsNullOrEmpty(msg) ? msg : error;
 
         return new CryptoChiefApiException(
             code!, status, message ?? code!, Truncate(body, 8 * 1024));

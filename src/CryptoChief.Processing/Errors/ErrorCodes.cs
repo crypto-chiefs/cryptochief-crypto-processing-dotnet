@@ -13,9 +13,7 @@ public static class ErrorCodes
     public const string AssetAlreadySelected     = "ASSET_ALREADY_SELECTED";
     public const string InvalidParams            = "INVALID_PARAMS";
 
-    /// <summary>A wallet label over 255 characters. A real machine code from the
-    /// gateway, unlike the upstream refusals that arrive as SERVICE_ERROR with
-    /// the detail in the message.</summary>
+    /// <summary>A wallet label over 255 characters — characters, not bytes.</summary>
     public const string LabelTooLong             = "LABEL_TOO_LONG";
     public const string ServiceError             = "SERVICE_ERROR";
     public const string Unauthorized             = "UNAUTHORIZED";
