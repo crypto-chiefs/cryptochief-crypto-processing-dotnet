@@ -12,6 +12,14 @@ public static class WebhookVerifier
 {
     public const string SignatureHeader = "Signature";
 
+    /// <summary>
+    /// Header carrying the delivery's uuid on every webhook the platform sends. Constant across
+    /// every attempt and resend of one delivery — use it as your receiver's idempotency key — and
+    /// the argument <c>client.Webhooks.InfoAsync</c> / <c>ResendAsync</c> take. Keep it when you
+    /// log an incoming webhook: there is no other way to name a delivery later.
+    /// </summary>
+    public const string DeliveryHeader = "X-Webhook-Delivery";
+
     /// <summary>IP addresses webhooks are delivered from. Whitelist at your edge.</summary>
     public static readonly IReadOnlyList<string> SenderIps = new[]
     {

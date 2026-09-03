@@ -33,4 +33,15 @@ public static class ErrorCodes
     public const string CallsNotAllowed          = "CALLS_NOT_ALLOWED_FOR_TRANSFER";
     public const string ContractCallsUnsupported = "CONTRACT_CALLS_UNSUPPORTED_ON_NETWORK";
     public const string NetworkError             = "NETWORK_ERROR";
+
+    /// <summary>The object does not exist OR is not this project's — deliberately indistinguishable.</summary>
+    public const string NotFound                 = "NOT_FOUND";
+    /// <summary>Webhook resend: a newer event exists for the same object; only the latest may be resent. Permanent.</summary>
+    public const string DeliverySuperseded       = "DELIVERY_SUPERSEDED";
+    /// <summary>Webhook resend: a worker holds the delivery, or it is already scheduled for a retry.</summary>
+    public const string DeliveryInFlight         = "DELIVERY_IN_FLIGHT";
+    /// <summary>Webhook resend: resent under a minute ago (HTTP 429, Retry-After).</summary>
+    public const string ResendTooSoon            = "RESEND_TOO_SOON";
+    /// <summary>Static-deposit resend: no webhook was ever queued — the wallet had no callback_url.</summary>
+    public const string NoDeliveries             = "NO_DELIVERIES";
 }

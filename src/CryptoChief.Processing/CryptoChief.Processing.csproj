@@ -12,7 +12,7 @@
 
   <PropertyGroup Label="NuGet">
     <PackageId>CryptoChief.Processing</PackageId>
-    <Version>0.7.0</Version>
+    <Version>0.8.0</Version>
     <Authors>Crypto Chief</Authors>
     <Company>Crypto Chief</Company>
     <Product>Crypto Chief Processing .NET SDK</Product>
@@ -29,7 +29,7 @@
     <PublishRepositoryUrl>true</PublishRepositoryUrl>
     <EmbedUntrackedSources>true</EmbedUntrackedSources>
     <DebugType>portable</DebugType>
-    <PackageReleaseNotes>0.7.0 — Adds the endpoints the API documents and this SDK did not cover: wallet pay-in history, the supported-blockchains and platform-assets catalogues, the fiat and crypto currency lists, and the status/search filters on sweep history. Sweep settings gain gas_source, so a TRON wallet can be told to burn its own TRX instead of taking rented energy billed to your API credits. Fixes: gateway error codes now reach ApiException.Code, so ErrorCodes constants match; a bare-array endpoint answering an empty result yields an empty list rather than null; and the sweep fee modes and completed_at are documented as they actually behave — completed_at is stamped on failures too, so it is not proof a sweep settled.</PackageReleaseNotes>
+    <PackageReleaseNotes>0.8.0 — The platform's outbound webhooks become readable and re-firable: client.Webhooks.InfoAsync reads one delivery with every attempt (HTTP status, duration, the body your endpoint answered), ResendAsync re-fires it, and ResendStaticDepositAsync re-fires the newest webhook of a static deposit by the deposit's uuid — the same routes, bodies and refusal codes as the white-label platform. Every webhook now carries X-Webhook-Delivery (WebhookVerifier.DeliveryHeader), the delivery uuid these methods take and a natural idempotency key; keep it when you log a webhook. New ErrorCodes: DeliverySuperseded (a newer event exists for the same object — only the latest may be resent), DeliveryInFlight, ResendTooSoon, NoDeliveries, NotFound. A resend is synchronous here: Queued=true arrives with Status already delivered or failed.</PackageReleaseNotes>
   </PropertyGroup>
 
   <ItemGroup>
