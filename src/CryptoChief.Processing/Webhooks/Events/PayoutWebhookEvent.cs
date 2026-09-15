@@ -13,8 +13,27 @@ public sealed record PayoutWebhookEvent
     public string? AmountToReceive { get; init; }
     public string? ToAddress { get; init; }
     public JsonElement? FeeInfo { get; init; }
+
+    /// <summary>
+    /// The payout's sources. Each element has an integer <c>confirmations</c>, absent until its
+    /// transaction is on chain.
+    /// </summary>
     public JsonElement? Sources { get; init; }
+
+    /// <summary>
+    /// Transactions the platform made for the payout, e.g. a gas top-up. Each element has an
+    /// integer <c>confirmations</c>, absent until the transaction is on chain.
+    /// </summary>
     public JsonElement? ServiceOperations { get; init; }
+
+    /// <summary>Lowest confirmation count among the sources.</summary>
+    public int? Confirmations { get; init; }
+
+    /// <summary>
+    /// Confirmations the network requires. <c>payout.paid</c> is sent once every source reaches it.
+    /// </summary>
+    public int? RequiredConfirmations { get; init; }
+
     public string? CreatedAt { get; init; }
     public string? CompletedAt { get; init; }
     public string? ErrorReason { get; init; }
@@ -33,6 +52,16 @@ public sealed record TransactionWebhookEvent
     public string? Value { get; init; }
     public string? Contract { get; init; }
     public string? TxHash { get; init; }
+
+    /// <summary>
+    /// Confirmations when the event was sent. The event comes only on a final status; to follow
+    /// the count, poll <c>Transactions.InfoAsync</c>.
+    /// </summary>
+    public int? Confirmations { get; init; }
+
+    /// <summary>Confirmations the network requires.</summary>
+    public int? RequiredConfirmations { get; init; }
+
     public string? CreatedAt { get; init; }
     public string? CompletedAt { get; init; }
     public string? ErrorReason { get; init; }
@@ -151,9 +180,14 @@ public sealed record SweepWebhookEvent
     public int SweepConfirmations { get; init; }
 
     /// <summary>
-    /// When the chain was observed to hold the sweep. NOT the task's completion
-    /// timestamp, which is stamped on every terminal outcome - failures
-    /// included - and so says nothing about settlement.
+    /// Confirmations the network requires. The event is sent once
+    /// <see cref="SweepConfirmations"/> reaches it.
+    /// </summary>
+    public int? RequiredConfirmations { get; init; }
+
+    /// <summary>
+    /// When the sweep was observed at <see cref="RequiredConfirmations"/>. Not the history's
+    /// <c>completed_at</c>, which is the send time.
     /// </summary>
     public string? ConfirmedAt { get; init; }
 

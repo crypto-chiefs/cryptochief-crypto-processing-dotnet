@@ -12,7 +12,7 @@
 
   <PropertyGroup Label="NuGet">
     <PackageId>CryptoChief.Processing</PackageId>
-    <Version>0.8.0</Version>
+    <Version>0.9.0</Version>
     <Authors>Crypto Chief</Authors>
     <Company>Crypto Chief</Company>
     <Product>Crypto Chief Processing .NET SDK</Product>
@@ -29,7 +29,7 @@
     <PublishRepositoryUrl>true</PublishRepositoryUrl>
     <EmbedUntrackedSources>true</EmbedUntrackedSources>
     <DebugType>portable</DebugType>
-    <PackageReleaseNotes>0.8.0 — The platform's outbound webhooks become readable and re-firable: client.Webhooks.InfoAsync reads one delivery with every attempt (HTTP status, duration, the body your endpoint answered), ResendAsync re-fires it, and ResendStaticDepositAsync re-fires the newest webhook of a static deposit by the deposit's uuid — the same routes, bodies and refusal codes as the white-label platform. Every webhook now carries X-Webhook-Delivery (WebhookVerifier.DeliveryHeader), the delivery uuid these methods take and a natural idempotency key; keep it when you log a webhook. New ErrorCodes: DeliverySuperseded (a newer event exists for the same object — only the latest may be resent), DeliveryInFlight, ResendTooSoon, NoDeliveries, NotFound. A resend is synchronous here: Queued=true arrives with Status already delivered or failed.</PackageReleaseNotes>
+    <PackageReleaseNotes>0.9.0 — Breaking: WaitForPayoutAsync without PollOptions waits 90 minutes (PollOptions.PayoutTimeout); PollOptions.Timeout defaults to 10 minutes. PayoutStatus: Refueling, RefuelConfirmed, Sending, Broadcasting, InMempool, ConfirmCheck; a payout is ConfirmCheck until every source reaches RequiredConfirmations. PayoutInfo: Confirmations, RequiredConfirmations, ServiceOperations (PayoutServiceOperation). PayoutSource: Network, AmountCrypto, NeedRefuel, RefuelAmount, EstimatedFee, EstimatedFeeFiat, FeePaid, FeePaidFiat, TxId, Confirmations; Amount is obsolete, use AmountCrypto. TransactionInfo: Confirmations, RequiredConfirmations; the transaction is Confirmed at RequiredConfirmations. Sweep: RequiredConfirmations; the sweep is Completed when SweepConfirmations reaches it; CompletedAt is the send time, not settlement. Withdrawal: WithdrawalStatus constants, NeedRefuel, RefuelTxHash, RefuelStatus, Confirmations, RequiredConfirmations, ErrorReason, EstimatedFeeFiat, ActualFeeFiat, FeeMode, CompletedAt, IsTerminal, Succeeded; Error, ConfirmedAt, UpdatedAt, Contract and AmountFiat are not sent. PayoutWebhookEvent and TransactionWebhookEvent: Confirmations, RequiredConfirmations. SweepWebhookEvent: RequiredConfirmations.</PackageReleaseNotes>
   </PropertyGroup>
 
   <ItemGroup>

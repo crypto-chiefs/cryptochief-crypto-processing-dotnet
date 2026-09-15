@@ -123,11 +123,7 @@ try
         UrlCallback = "https://your.app/webhooks/payout",
     });
 
-    var final = await client.WaitForPayoutAsync(payout.Uuid, new PollOptions
-    {
-        Interval = TimeSpan.FromSeconds(5),
-        Timeout  = TimeSpan.FromMinutes(5),
-    });
+    var final = await client.WaitForPayoutAsync(payout.Uuid);
     if (final.Succeeded)
         Console.WriteLine($"paid: tx={final.TxId}");
 }
@@ -136,6 +132,26 @@ catch (CryptoChiefApiException ex) when (ex.Code == ErrorCodes.InsufficientFunds
     // top up and try again
 }
 ```
+
+Confirmation fields on `PayoutInfo` (`InfoAsync`, `ExecuteAsync`, `HistoryAsync`), all optional:
+
+| Field | Type | Meaning |
+|---|---|---|
+| `Sources[].Confirmations` | `int?` | Confirmations of the source's transaction; absent until it is on chain. |
+| `ServiceOperations[].Confirmations` | `int?` | Confirmations of a transaction the platform made for the payout, e.g. a gas top-up. |
+| `Confirmations` | `int?` | Lowest count among the sources. |
+| `RequiredConfirmations` | `int?` | Confirmations the network requires. |
+
+The payout is `PayoutStatus.ConfirmCheck` until every source reaches `RequiredConfirmations`,
+then `paid`. `RequiredConfirmations` may be absent; on `paid` with it present,
+`Confirmations` >= `RequiredConfirmations`.
+`PayoutWebhookEvent` carries the same two payout-level fields; each element of `Sources` and
+`ServiceOperations` carries `confirmations` once its transaction is on chain.
+
+`WaitForPayoutAsync` without options waits 90 minutes (`PollOptions.PayoutTimeout`). With
+`PollOptions`, every `WaitFor*` method waits `Timeout`, 10 minutes by default; for a payout set
+`Timeout = PollOptions.PayoutTimeout`. A `TimeoutException` means the object is not finished yet;
+its last state is in `ex.Data["LastSnapshot"]`.
 
 ## Two-phase sign + execute
 
@@ -162,6 +178,12 @@ var signed = await client.Transactions.SignAsync(new SignTransactionRequest
 
 await client.Transactions.ExecuteAsync(new ExecuteTransactionRequest { Uuid = signed.Uuid });
 ```
+
+`TransactionInfo.Confirmations` grows while the transaction is `broadcasted`. At
+`RequiredConfirmations` the transaction becomes `confirmed`. Both fields are always sent on
+`ExecuteAsync`, `InfoAsync`, `HistoryAsync` and the `transaction.*` webhook. The webhook is sent
+only on a final status; to follow the count, poll `InfoAsync`. On `confirmed`,
+`Confirmations` >= `RequiredConfirmations`.
 
 ## Contract calls — the easy way
 
@@ -798,17 +820,52 @@ var page = await client.Sweeps.HistoryAsync(new SweepHistoryQuery
 On `WalletHistoryAsync` the wallet is already fixed by `Address`, so `Search` matches the
 transaction hashes and the task id.
 
-A sweep is broadcast first and confirmed after: `SweepStatus.Broadcasted` means the
-transaction is out and not yet confirmed, `SweepStatus.Completed` means confirmed, with
-`SweepConfirmations` above zero. Earlier platform versions reported `completed` at
-broadcast, so a sweep could read as settled while its transaction was still unconfirmed —
-the confirmation count separates the two.
+A sweep is broadcast first and completed after: while it is `SweepStatus.Broadcasted`,
+`SweepConfirmations` grows; it becomes `SweepStatus.Completed` when the count reaches
+`RequiredConfirmations`. The funds have arrived on `Completed` with `SweepConfirmations` above
+zero. A count above zero without `Completed` is not settlement. Older records can be `Completed`
+with `0`: not settled. The `sweep.confirmed` webhook is sent once, on completion, with both counts.
 
-**`CompletedAt` is not proof the sweep settled.** It is stamped whenever the sweep reached a
-terminal outcome, failures included, so a failed sweep carries one too — reading its
-presence as "the funds arrived" books a failure as money received. Check
-`SweepConfirmations > 0`, or take `ConfirmedAt` off the `sweep.confirmed` webhook, which
-exists as a separate field for exactly this reason.
+**`CompletedAt` is not a settlement signal.** It is set when the sweep transaction is sent
+(for `waiting_gas`, `failed` and `skipped`, when that status was recorded), so a `broadcasted`
+sweep already has it. Check `Status == Completed` with `SweepConfirmations > 0`, or take
+`ConfirmedAt` off the `sweep.confirmed` webhook.
+
+## Manual withdrawals
+
+`client.Withdrawals` reads withdrawals made from the project's wallets; they are not created
+through this API and send no webhooks. Statuses (`WithdrawalStatus`):
+
+| Status | Meaning |
+|---|---|
+| `queue` | Waiting to be processed. |
+| `refueling` | The source wallet is being topped up with native coin for gas. |
+| `refuel_confirmed` | Gas is in place; the transfer is about to be sent. |
+| `sending` | The transfer is being signed and sent. |
+| `broadcasting` | Handed off for broadcast, hash not known yet (EVM). |
+| `in_mempool` | In the mempool, not in a block yet (UTXO networks). |
+| `confirm_check` | Sent; waiting for `RequiredConfirmations`. |
+| `completed` | Terminal: the transaction reached `RequiredConfirmations`. |
+| `failed` | Terminal: `ErrorReason` says why. |
+
+`Confirmations` is absent before the first block and `0` while no confirmations are counted yet,
+including after the transaction left a block (status stays `confirm_check`). On `completed`, `Confirmations` >= `RequiredConfirmations`.
+`RequiredConfirmations` is always sent.
+
+```csharp
+var wd = await client.Withdrawals.InfoAsync("b0d1f7f9-1eaa-4c2f-8f9b-2b0d1b0b9f11");
+
+if (wd.Succeeded)
+    Console.WriteLine($"completed at {wd.CompletedAt}: tx={wd.TxHash}, fee ${wd.ActualFeeFiat}");
+else if (wd.Status == WithdrawalStatus.ConfirmCheck)
+    Console.WriteLine($"on its way: {wd.Confirmations?.ToString() ?? "not in a block yet"}/{wd.RequiredConfirmations}");
+else if (wd.IsTerminal)
+    Console.WriteLine($"{wd.Status}: {wd.ErrorReason}");
+```
+
+`HistoryAsync` returns the same shape per item and pages by `Page`, `PageSize`, `DateFrom`
+and `DateTo`; it has no status filter. `Error`, `ConfirmedAt`, `UpdatedAt`, `Contract` and
+`AmountFiat` are not sent and stay `null`; use `ErrorReason` and `CompletedAt`.
 
 ## Documentation
 

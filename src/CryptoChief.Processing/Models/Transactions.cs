@@ -84,6 +84,19 @@ public sealed record TransactionInfo
     public ulong? Nonce { get; init; }
     public string? ActualFee { get; init; }
     public string? ActualFeeFiat { get; init; }
+
+    /// <summary>
+    /// Confirmations of the transaction. Grows while it is <see cref="TxStatus.Broadcasted"/>.
+    /// Always sent. On <see cref="TxStatus.Confirmed"/>, at least <see cref="RequiredConfirmations"/>.
+    /// </summary>
+    public int? Confirmations { get; init; }
+
+    /// <summary>
+    /// Confirmations the network requires. On reaching it the transaction is
+    /// <see cref="TxStatus.Confirmed"/>. Always sent.
+    /// </summary>
+    public int? RequiredConfirmations { get; init; }
+
     public string? CreatedAt { get; init; }
     public string? UpdatedAt { get; init; }
     public string? Error { get; init; }

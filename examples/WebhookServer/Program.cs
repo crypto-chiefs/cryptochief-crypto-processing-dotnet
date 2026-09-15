@@ -24,8 +24,8 @@ app.MapPost("/webhooks/payout", async (HttpRequest req) =>
     {
         var evt = WebhookVerifier.VerifyAndDecode<PayoutWebhookEvent>(apiKey, body, sig);
         app.Logger.LogInformation(
-            "payout {Uuid}: {Status} (event={Event}, tx={ToAddress})",
-            evt.Uuid, evt.Status, evt.Event, evt.ToAddress);
+            "payout {Uuid}: {Status} (event={Event}, tx={ToAddress}, confirmations={Confirmations}/{Required})",
+            evt.Uuid, evt.Status, evt.Event, evt.ToAddress, evt.Confirmations, evt.RequiredConfirmations);
         return Results.Ok();
     }
     catch (Exception ex)
@@ -45,8 +45,8 @@ app.MapPost("/webhooks/transaction", async (HttpRequest req) =>
     {
         var evt = WebhookVerifier.VerifyAndDecode<TransactionWebhookEvent>(apiKey, body, sig);
         app.Logger.LogInformation(
-            "tx {Uuid}: {Status} on {Network} (hash={TxHash})",
-            evt.Uuid, evt.Status, evt.Network, evt.TxHash);
+            "tx {Uuid}: {Status} on {Network} (hash={TxHash}, confirmations={Confirmations}/{Required})",
+            evt.Uuid, evt.Status, evt.Network, evt.TxHash, evt.Confirmations, evt.RequiredConfirmations);
         return Results.Ok();
     }
     catch (Exception ex)
@@ -96,9 +96,9 @@ app.MapPost("/webhooks/sweep", async (HttpRequest req) =>
     {
         var evt = WebhookVerifier.VerifyAndDecode<SweepWebhookEvent>(apiKey, body, sig);
         app.Logger.LogInformation(
-            "sweep {TaskId}: {Amount} {Asset} {From} -> {Master} (tx={TxHash}, confirmations={Confirmations}, trigger={TypeWork}, fee_usd={Fee})",
+            "sweep {TaskId}: {Amount} {Asset} {From} -> {Master} (tx={TxHash}, confirmations={Confirmations}/{Required}, trigger={TypeWork}, fee_usd={Fee})",
             evt.TaskId, evt.AmountHuman, evt.AssetSymbol, evt.WalletAddress, evt.ToAddress,
-            evt.SweepTxHash, evt.SweepConfirmations, evt.TypeWork, evt.TotalFeeUsd);
+            evt.SweepTxHash, evt.SweepConfirmations, evt.RequiredConfirmations, evt.TypeWork, evt.TotalFeeUsd);
 
         // TaskId is the idempotency key: one sweep settles once. Seeing it
         // twice means a redelivery - acknowledge and stop.

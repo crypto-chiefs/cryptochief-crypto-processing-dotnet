@@ -10,12 +10,12 @@ public static class SweepMode
 /// Sweep status.
 /// </summary>
 /// <remarks>
-/// A sweep is broadcast first and confirmed after: <c>Broadcasted</c> means the transaction
-/// is out and not yet confirmed, <c>Completed</c> means the chain confirmed it. The platform
-/// used to report <c>completed</c> at broadcast, so a sweep could read as settled while its
-/// transaction was still unconfirmed or had been dropped — which is why the pair to check
-/// is <c>Completed</c> together with <c>Sweep.SweepConfirmations</c> above zero, and never
-/// the presence of <c>Sweep.CompletedAt</c>.
+/// A sweep is broadcast first and completed after: while it is <c>Broadcasted</c>,
+/// <c>Sweep.SweepConfirmations</c> grows; it is <c>Completed</c> once the count reaches
+/// <c>Sweep.RequiredConfirmations</c>. The funds have arrived on <c>Completed</c> with
+/// <c>Sweep.SweepConfirmations</c> above zero. Older records can be <c>Completed</c> with <c>0</c>:
+/// not settled. Neither a count above zero alone nor the presence of <c>Sweep.CompletedAt</c> is
+/// settlement.
 /// <para><c>Skipped</c> is a sweep the platform decided against - almost always a balance
 /// below the wallet's threshold. A normal outcome, not a failure.</para>
 /// </remarks>
@@ -183,23 +183,29 @@ public sealed record Sweep
     public string? TypeWork { get; init; }
 
     /// <summary>
-    /// Confirmations seen on the sweep transaction — <c>0</c> until it is mined. Above
-    /// zero is the settlement signal: the chain was observed holding the funds.
+    /// Confirmations seen on the sweep transaction — <c>0</c> until it is in a block, then
+    /// growing while the sweep is <see cref="SweepStatus.Broadcasted"/>.
     /// </summary>
     public int? SweepConfirmations { get; init; }
 
     /// <summary>
-    /// When the sweep reached a terminal outcome — <b>failures included</b>. Absent while
-    /// it is still in flight.
+    /// Confirmations the network requires. The sweep is <see cref="SweepStatus.Completed"/> once
+    /// <see cref="SweepConfirmations"/> reaches it. On <see cref="SweepStatus.Completed"/>,
+    /// <see cref="SweepConfirmations"/> is at least this value; on older records it can be <c>0</c>,
+    /// which is not settled.
+    /// </summary>
+    public int? RequiredConfirmations { get; init; }
+
+    /// <summary>
+    /// When the sweep transaction was sent; for <see cref="SweepStatus.WaitingGas"/>,
+    /// <see cref="SweepStatus.Failed"/> and <see cref="SweepStatus.Skipped"/>, when that status was
+    /// recorded. Not updated on <see cref="SweepStatus.Completed"/>.
     /// </summary>
     /// <remarks>
-    /// <b>Not proof the sweep settled.</b> A failed sweep is not in flight either, so it
-    /// carries a completion timestamp too; reading its presence as "the funds arrived"
-    /// books a failure as money received.
-    /// <para>To tell settlement apart, check <see cref="SweepConfirmations"/> is above
-    /// zero. Or take <c>confirmed_at</c> off the <c>sweep.confirmed</c> webhook
-    /// (<c>SweepWebhookEvent.ConfirmedAt</c>) — it exists as a separate field for exactly
-    /// this reason, rather than reusing this one.</para>
+    /// <b>Not a settlement signal:</b> a <see cref="SweepStatus.Broadcasted"/> sweep already has it.
+    /// Settlement is <see cref="Status"/> <see cref="SweepStatus.Completed"/> with
+    /// <see cref="SweepConfirmations"/> above zero, or <c>confirmed_at</c>
+    /// on the <c>sweep.confirmed</c> webhook (<c>SweepWebhookEvent.ConfirmedAt</c>).
     /// </remarks>
     public string? CompletedAt { get; init; }
 
@@ -238,8 +244,7 @@ public sealed record Sweep
     public string? ServiceFeeFiat { get; init; }
 
     /// <summary>
-    /// Never populated - sweeps carry <see cref="CreatedAt"/> and, once the task reaches a
-    /// terminal outcome, <see cref="CompletedAt"/>.
+    /// Never populated - sweeps carry <see cref="CreatedAt"/> and <see cref="CompletedAt"/>.
     /// </summary>
     [Obsolete("Never populated by the API")]
     public string? UpdatedAt { get; init; }

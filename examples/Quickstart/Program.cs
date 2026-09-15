@@ -41,8 +41,7 @@ try
     });
     Console.WriteLine($"Payout uuid: {payout.Uuid}");
 
-    var final = await client.WaitForPayoutAsync(payout.Uuid,
-        new PollOptions { Interval = TimeSpan.FromSeconds(5), Timeout = TimeSpan.FromMinutes(5) });
+    var final = await client.WaitForPayoutAsync(payout.Uuid);
     Console.WriteLine($"Final: {final.Status} (tx={final.TxId ?? "-"})");
 }
 catch (CryptoChiefApiException ex) when (ex.Code == ErrorCodes.InsufficientFunds)

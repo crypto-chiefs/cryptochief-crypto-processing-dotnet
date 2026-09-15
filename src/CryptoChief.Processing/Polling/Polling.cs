@@ -5,20 +5,39 @@ namespace CryptoChief.Processing.Polling;
 
 public sealed record PollOptions
 {
+    /// <summary>Default timeout of <see cref="PollingExtensions.WaitForPayoutAsync"/> without options: 90 minutes.</summary>
+    public static readonly TimeSpan PayoutTimeout = TimeSpan.FromMinutes(90);
+
     public TimeSpan Interval { get; init; } = TimeSpan.FromSeconds(5);
+
+    /// <summary>
+    /// Default 10 minutes, for payouts too; for a payout set <c>Timeout = PayoutTimeout</c>.
+    /// <see cref="PollingExtensions.WaitForPayoutAsync"/> without options waits
+    /// <see cref="PayoutTimeout"/>. On expiry a <see cref="TimeoutException"/> is thrown: the object is
+    /// not terminal yet, not failed; its last state is in <c>Data["LastSnapshot"]</c>.
+    /// </summary>
     public TimeSpan Timeout { get; init; } = TimeSpan.FromMinutes(10);
 }
 
 /// <summary>Block until a payout / transaction / pay-in reaches a terminal state.</summary>
 public static class PollingExtensions
 {
+    /// <summary>
+    /// Polls until the payout is terminal. It stays <see cref="PayoutStatus.ConfirmCheck"/> until
+    /// every source reaches <see cref="PayoutInfo.RequiredConfirmations"/>. Without
+    /// <paramref name="options"/> it waits <see cref="PollOptions.PayoutTimeout"/>. A
+    /// <see cref="TimeoutException"/> means the payout is not finished yet, not that it failed.
+    /// </summary>
     public static Task<PayoutInfo> WaitForPayoutAsync(
         this CryptoChiefClient client, string uuid,
         PollOptions? options = null, CancellationToken cancellationToken = default) =>
-        PollUntilTerminalAsync(options,
+        PollUntilTerminalAsync(PayoutOptions(options),
             ct => client.Payouts.InfoAsync(uuid, ct),
             p => p.IsTerminal,
             cancellationToken);
+
+    internal static PollOptions PayoutOptions(PollOptions? options) =>
+        options ?? new PollOptions { Timeout = PollOptions.PayoutTimeout };
 
     public static Task<TransactionInfo> WaitForTransactionAsync(
         this CryptoChiefClient client, string uuid,

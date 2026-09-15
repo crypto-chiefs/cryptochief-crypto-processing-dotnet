@@ -1,6 +1,11 @@
 using System.Net;
+using System.Text;
 using System.Text.Json;
+using CryptoChief.Processing.Http;
+using CryptoChief.Processing.Internal;
 using CryptoChief.Processing.Models;
+using CryptoChief.Processing.Webhooks;
+using CryptoChief.Processing.Webhooks.Events;
 using FluentAssertions;
 using Xunit;
 
@@ -231,9 +236,10 @@ public class SweepsTests
         var handler = new CapturingHandler(_ => Resp(HttpStatusCode.OK, """
             {"items":[
               {"task_id":"t1","status":"broadcasted","wallet_address":"0xa","chain":"ETH_MAINNET",
-               "sweep_confirmations":2,"type_work":"threshold","total_fee_usd":"1.20"},
+               "sweep_confirmations":2,"required_confirmations":12,"completed_at":"2026-08-28T09:58:00Z",
+               "type_work":"threshold","total_fee_usd":"1.20"},
               {"task_id":"t2","status":"completed","wallet_address":"0xb","chain":"ETH_MAINNET",
-               "sweep_confirmations":12,"completed_at":"2026-08-28T10:00:00Z","real_sweep_fee_usd":"0.98"}
+               "sweep_confirmations":12,"required_confirmations":12,"completed_at":"2026-08-28T10:00:00Z","real_sweep_fee_usd":"0.98"}
             ],"meta":{"total":2,"page":1,"page_size":50}}
             """));
         var client = NewClient(handler);
@@ -243,22 +249,147 @@ public class SweepsTests
         var inFlight = page.Items[0];
         var settled = page.Items[1];
         inFlight.Status.Should().Be(SweepStatus.Broadcasted);
+        // In a block, below the depth: still broadcasted.
         inFlight.SweepConfirmations.Should().Be(2);
-        // Still in flight: there is no settlement moment to report yet.
-        inFlight.CompletedAt.Should().BeNull();
+        inFlight.RequiredConfirmations.Should().Be(12);
+        // Set at broadcast, so an in-flight sweep already has it.
+        inFlight.CompletedAt.Should().Be("2026-08-28T09:58:00Z");
         inFlight.TypeWork.Should().Be("threshold");
         inFlight.TotalFeeUsd.Should().Be("1.20");
         settled.Status.Should().Be(SweepStatus.Completed);
+        settled.SweepConfirmations.Should().Be(12);
+        settled.RequiredConfirmations.Should().Be(12);
         settled.CompletedAt.Should().Be("2026-08-28T10:00:00Z");
         settled.RealSweepFeeUsd.Should().Be("0.98");
     }
 
     [Fact]
+    public async Task History_counts_a_sweep_up_to_the_depth_and_above_zero_is_not_settlement()
+    {
+        var handler = new CapturingHandler(_ => Resp(HttpStatusCode.OK, """
+            {"items":[
+              {"task_id":"t6","status":"broadcasted","wallet_address":"0xa","chain":"ETH_MAINNET",
+               "sweep_confirmations":0,"required_confirmations":12},
+              {"task_id":"t7","status":"broadcasted","wallet_address":"0xb","chain":"ETH_MAINNET",
+               "sweep_confirmations":3,"required_confirmations":12},
+              {"task_id":"t8","status":"completed","wallet_address":"0xc","chain":"ETH_MAINNET",
+               "sweep_confirmations":12,"required_confirmations":12},
+              {"task_id":"t9","status":"completed","wallet_address":"SolWallet","chain":"SOLANA_MAINNET",
+               "sweep_confirmations":32,"required_confirmations":32}
+            ],"meta":{"total":4,"page":1,"page_size":20}}
+            """));
+
+        var page = await NewClient(handler).Sweeps.HistoryAsync(new SweepHistoryQuery());
+
+        page.Items.Select(s => s.RequiredConfirmations).Should().Equal(12, 12, 12, 32);
+
+        // A count above zero books t7, still in flight, as money received.
+        page.Items.Where(s => s.SweepConfirmations > 0).Select(s => s.TaskId)
+            .Should().Equal("t7", "t8", "t9");
+
+        // Completed with a count above zero; here it agrees with the count reaching the depth.
+        page.Items.Where(s => s.Status == SweepStatus.Completed && s.SweepConfirmations > 0).Select(s => s.TaskId)
+            .Should().Equal("t8", "t9");
+        page.Items.Where(s => s.SweepConfirmations >= s.RequiredConfirmations).Select(s => s.TaskId)
+            .Should().Equal("t8", "t9");
+
+        // Finality without a block count (Solana finalized) is published as the depth, not as
+        // 4294967295 - which would not even fit the int this field is.
+        page.Items[3].SweepConfirmations.Should().Be(page.Items[3].RequiredConfirmations);
+    }
+
+    [Fact]
+    public async Task History_from_a_platform_without_the_depth_reads_null()
+    {
+        var handler = new CapturingHandler(_ => Resp(HttpStatusCode.OK, """
+            {"items":[{"task_id":"t1","status":"completed","wallet_address":"0xa","chain":"ETH_MAINNET",
+                       "sweep_confirmations":1}],
+             "meta":{"total":1,"page":1,"page_size":20}}
+            """));
+
+        var page = await NewClient(handler).Sweeps.HistoryAsync(new SweepHistoryQuery());
+
+        var sweep = page.Items.Should().ContainSingle().Subject;
+        sweep.Status.Should().Be(SweepStatus.Completed);
+        sweep.SweepConfirmations.Should().Be(1);
+        sweep.RequiredConfirmations.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task History_sweep_completed_with_zero_confirmations_is_not_settled()
+    {
+        // An older record: completed with 0 confirmations was never seen in a block.
+        var handler = new CapturingHandler(_ => Resp(HttpStatusCode.OK, """
+            {"items":[
+              {"task_id":"t1","status":"completed","wallet_address":"0xa","chain":"ETH_MAINNET",
+               "sweep_confirmations":0,"required_confirmations":12,
+               "completed_at":"2026-08-01T10:00:00Z"},
+              {"task_id":"t2","status":"completed","wallet_address":"0xb","chain":"ETH_MAINNET",
+               "sweep_confirmations":12,"required_confirmations":12,
+               "completed_at":"2026-08-01T10:05:00Z"}
+            ],"meta":{"total":2,"page":1,"page_size":20}}
+            """));
+
+        var page = await NewClient(handler).Sweeps.HistoryAsync(new SweepHistoryQuery());
+
+        var sweep = page.Items[0];
+        sweep.Status.Should().Be(SweepStatus.Completed);
+        sweep.SweepConfirmations.Should().Be(0);
+        sweep.RequiredConfirmations.Should().Be(12);
+
+        page.Items
+            .Where(s => s.Status == SweepStatus.Completed && s.SweepConfirmations > 0)
+            .Select(s => s.TaskId)
+            .Should().Equal("t2");
+    }
+
+    private const string SweepConfirmedBody = """
+        {"event":"sweep.confirmed","task_id":"898cdbd0-task","status":"completed",
+         "wallet_address":"0x77EDde3213b70c9dd224C874c28f41B23B070f65","to_address":"0xmaster",
+         "network":"ETH_MAINNET","chain_family":"evm","asset_symbol":"USDT","asset_type":"token",
+         "asset_contract":"0xdAC17F958D2ee523a2206206994597C13D831ec7",
+         "amount_raw":"25000000","amount_human":"25","sweep_tx_hash":"0xsweep",
+         "sweep_confirmations":14,"required_confirmations":12,
+         "confirmed_at":"2026-09-14T10:04:00Z","type_work":"momentum","total_fee_usd":"1.10"}
+        """;
+
+    [Fact]
+    public void Sweep_confirmed_webhook_carries_the_depth_the_sweep_was_held_to()
+    {
+        var body = Encoding.UTF8.GetBytes(SweepConfirmedBody);
+
+        var evt = WebhookVerifier.VerifyAndDecode<SweepWebhookEvent>("K-1", body, Sign(body));
+
+        evt.Event.Should().Be("sweep.confirmed");
+        evt.Status.Should().Be(SweepStatus.Completed);
+        evt.SweepConfirmations.Should().Be(14);
+        evt.RequiredConfirmations.Should().Be(12);
+        evt.SweepConfirmations.Should().BeGreaterThanOrEqualTo(evt.RequiredConfirmations!.Value);
+    }
+
+    [Fact]
+    public void Sweep_confirmed_webhook_from_an_older_sweep_service_has_no_depth()
+    {
+        // A sweep service built before sweeps waited for finality reports at the first block
+        // and sends no required_confirmations. The event must still decode.
+        var body = Encoding.UTF8.GetBytes(SweepConfirmedBody
+            .Replace("\"sweep_confirmations\":14,\"required_confirmations\":12,", "\"sweep_confirmations\":1,"));
+
+        var evt = WebhookVerifier.VerifyAndDecode<SweepWebhookEvent>("K-1", body, Sign(body));
+
+        evt.TaskId.Should().Be("898cdbd0-task");
+        evt.SweepConfirmations.Should().Be(1);
+        evt.RequiredConfirmations.Should().BeNull();
+    }
+
+    private static string Sign(byte[] body) =>
+        RequestSigner.Sign(CanonicalJson.Canonicalise(body), "K-1");
+
+    [Fact]
     public async Task History_stamps_completed_at_on_a_failed_sweep_too()
     {
-        // The sweeper stamps completed_at at every terminal outcome, failures included —
-        // a failed sweep is not "in flight" either. Reading its presence as settlement
-        // books a failure as money received; the confirmation count is what separates them.
+        // completed_at is set on failed and skipped sweeps too. Reading its presence as
+        // settlement books a failure as money received; the status is what separates them.
         var handler = new CapturingHandler(_ => Resp(HttpStatusCode.OK, """
             {"items":[
               {"task_id":"t3","status":"failed","wallet_address":"0xc","chain":"ETH_MAINNET",
@@ -283,7 +414,7 @@ public class SweepsTests
         skipped.Status.Should().Be(SweepStatus.Skipped);
         skipped.CompletedAt.Should().NotBeNull();
 
-        // The settlement test: status completed AND confirmations above zero.
+        // The settlement test: status completed with a count above zero.
         page.Items
             .Where(s => s.Status == SweepStatus.Completed && s.SweepConfirmations > 0)
             .Select(s => s.TaskId)
