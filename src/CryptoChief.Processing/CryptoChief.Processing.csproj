@@ -12,7 +12,7 @@
 
   <PropertyGroup Label="NuGet">
     <PackageId>CryptoChief.Processing</PackageId>
-    <Version>0.9.0</Version>
+    <Version>0.10.0</Version>
     <Authors>Crypto Chief</Authors>
     <Company>Crypto Chief</Company>
     <Product>Crypto Chief Processing .NET SDK</Product>
@@ -47,6 +47,7 @@
     <PackageReference Include="Microsoft.Extensions.Options.ConfigurationExtensions" Version="8.0.0" />
     <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="8.0.0" />
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="8.0.0" />
+    <PackageReference Include="Microsoft.Extensions.Primitives" Version="8.0.0" />
     <PackageReference Include="Microsoft.SourceLink.GitHub" Version="8.0.0" PrivateAssets="All" />
   </ItemGroup>
 

@@ -528,10 +528,24 @@ always reads `CallbackUrl is null`.
 
 ## Webhooks
 
-Outbound webhooks are signed with the same algorithm used for outgoing
-requests. The library ships a verifier and typed events:
+Webhooks are signed with HMAC-SHA256 v1 using the API key:
+
+| Header | Value |
+|---|---|
+| `X-Webhook-Delivery` | delivery id, 1–128 characters `[A-Za-z0-9_-]`; the same on every attempt and resend |
+| `X-CC-Timestamp` | Unix time of the attempt, seconds, decimal without leading zeros |
+| `X-CC-Signature` | `v1=` + 64 hex characters |
+
+```
+string_to_sign = "CC-HMAC-SHA256-WEBHOOK-V1" \n X-CC-Timestamp \n X-Webhook-Delivery \n hex(sha256(body))
+signature      = "v1=" + hex(hmac_sha256(key = apiKey, message = string_to_sign))
+```
+
+Verify the raw request body before parsing it:
 
 ```csharp
+using System.Text.Json;
+using CryptoChief.Processing.Errors;
 using CryptoChief.Processing.Webhooks;
 using CryptoChief.Processing.Webhooks.Events;
 
@@ -539,32 +553,66 @@ app.MapPost("/webhooks/payout", async (HttpRequest req) =>
 {
     using var ms = new MemoryStream();
     await req.Body.CopyToAsync(ms);
-    var sig = req.Headers[WebhookVerifier.SignatureHeader].ToString();
     try
     {
-        var evt = WebhookVerifier.VerifyAndDecode<PayoutWebhookEvent>(apiKey, ms.ToArray(), sig);
-        // process evt...
+        var evt = WebhookVerifier.VerifyAndDecode<PayoutWebhookEvent>(apiKey, ms.ToArray(), req.Headers);
+        // process evt; deduplicate by req.Headers[WebhookVerifier.DeliveryHeader]
         return Results.Ok();
     }
-    catch
+    catch (WebhookVerificationException)
     {
         return Results.Unauthorized();
+    }
+    catch (Exception ex) when (ex is JsonException or CryptoChiefException)
+    {
+        return Results.BadRequest();
     }
 });
 ```
 
-For finer-grained control:
+`VerifyAndDecode<T>` throws past a successful verification when the body is not JSON of `T`
+(`JsonException`) or is JSON `null` (`CryptoChiefException`). Neither derives from
+`WebhookVerificationException`, so catch them too: uncaught they answer 5xx, which the platform
+retries.
+
+`Verify`, `TryVerify` and `VerifyAndDecode<T>` take the body as `ReadOnlySpan<byte>` (a string:
+`Encoding.UTF8.GetBytes(body)`) and the headers as any of:
+
+- `IEnumerable<KeyValuePair<string, StringValues>>` — ASP.NET Core `req.Headers`;
+- `HttpHeaders`;
+- `IEnumerable<KeyValuePair<string, IEnumerable<string>>>` or `IEnumerable<KeyValuePair<string, string>>`;
+- `Func<string, string?>` — a value by name, null when absent. One string cannot show every copy
+  of a repeated header: an empty copy is not seen. In ASP.NET Core pass `req.Headers`, not
+  `name => req.Headers[name]`.
+
+Header names are case-insensitive. Checks, in order:
+
+| Check | Exception |
+|---|---|
+| each header present once; values trimmed of spaces and tabs only; no CR/LF; timestamp decimal without leading zeros, delivery id and `v1=` + 64 hex in format | `WebhookHeadersException` |
+| \|now − timestamp\| ≤ tolerance (default 300 s) | `WebhookTimestampException` |
+| HMAC, constant-time, hex in any case | `WebhookSignatureException` |
+
+All three derive from `WebhookVerificationException` (a `CryptoChiefException`); answer 401.
+An empty API key throws `ArgumentException`. `TryVerify` returns `false` instead of throwing.
 
 ```csharp
-if (!WebhookVerifier.TryVerify(apiKey, body, signature))
-    return Results.Unauthorized();
+var ok = WebhookVerifier.TryVerify(apiKey, body, req.Headers, new WebhookVerifyOptions
+{
+    Tolerance = TimeSpan.FromSeconds(60),
+    Now       = () => DateTimeOffset.UtcNow,
+});
 ```
 
-`WebhookVerifier.SenderIps` lists the addresses webhooks are delivered from
-— whitelist them at your edge for defence in depth.
+`RequestSigner.SignWebhookV1(apiKey, timestamp, deliveryId, body)` returns the
+`X-CC-Signature` value; `RequestSigner.WebhookV1StringToSign` returns the string to sign.
+
+`WebhookVerifier.SenderIps` lists the addresses the processing platform delivers
+webhooks from — whitelist them at your edge for defence in depth. White-label
+installations deliver from their own address.
 
 Typed event payloads: `PayoutWebhookEvent`, `TransactionWebhookEvent`,
-`PayInWebhookEvent`, `StaticDepositWebhookEvent`.
+`PayInWebhookEvent`, `StaticDepositWebhookEvent`, `SweepWebhookEvent`.
 
 ## Error handling
 
@@ -593,12 +641,16 @@ catch (CryptoChiefApiException ex)
 }
 ```
 
-`ex.Code` is always a machine code. The platform writes refusals in two
-envelope shapes — the code in `error` when the gateway refused the request
-itself, the code in `msg` when it relayed a refusal from a service behind it
-as `SERVICE_ERROR` — and the SDK resolves both to `Code`. The English
-sentence, where there is one, stays in `ex.Message`; `ex.RawBody` keeps the
-body as it arrived.
+`ex.Code` is a machine code, read from either error body:
+
+| Body | `Code` | Message |
+|---|---|---|
+| `{"ok":false,"error":"CODE","msg":"..."}` | `error` | `msg` |
+| `{"ok":false,"error":"SERVICE_ERROR","msg":"CODE"}` | `msg` | `msg` |
+| `{"data":null,"error":{"status":...,"name":"...","message":"...","details":{"code":"CODE"}}}` | `error.details.code`, else `error.name` | `error.message` |
+
+With no code in the body, `Code` is `HTTP_<status>`. `ex.Message` includes the
+message; `ex.RawBody` keeps the body as received.
 
 `ex.IsRetryable` tells you whether the operation is plausibly transient
 (5xx, network).
@@ -647,6 +699,48 @@ var client = new CryptoChiefClient(options);
 **Test mode** is a per-project toggle in the dashboard, not a separate base
 URL — point a test-mode project's credentials at the same client.
 
+## Request signing
+
+Each request is signed with HMAC-SHA256 v1:
+
+| Header | Value |
+|---|---|
+| `Merchant` | `MerchantId` |
+| `X-CC-Timestamp` | Unix time, seconds |
+| `X-CC-Nonce` | 32 lowercase hex characters, new on every attempt |
+| `X-CC-Signature` | `v1=` + 64 lowercase hex characters |
+
+```
+string_to_sign = "CC-HMAC-SHA256-REQ-V1" \n timestamp \n nonce \n METHOD \n path \n query
+                 \n merchant \n idempotency_key \n hex(sha256(body))
+signature      = hex(hmac_sha256(key = apiKey, message = string_to_sign))
+```
+
+- `path` — route from `/v1/`, without the base URL and query (`/v1/payout/execute`).
+- `query` — without `?`; empty if none. `idempotency_key` — empty if not sent.
+- `body` — the exact bytes sent; empty body hashes to `e3b0c442…b855`.
+
+The body is the request serialized once with `System.Text.Json` (snake_case names, null
+members omitted); every attempt sends and signs the same bytes.
+
+Timestamp, nonce and signature are computed on every retry. On
+`SIGNATURE_TIMESTAMP_OUT_OF_RANGE` the client sets its clock offset from
+`server_time` (top level, or `error.details.server_time`) and repeats the
+request once.
+
+```csharp
+var signature = RequestSigner.SignHmacV1(apiKey, new HmacV1Input
+{
+    Timestamp = "1789430400",
+    Nonce     = RequestSigner.NewNonce(),
+    Method    = "POST",
+    Path      = "/v1/wallets/info",
+    Merchant  = merchantId,
+    Body      = bodyBytes,
+});
+// X-CC-Signature: v1={signature}
+```
+
 ## Idempotency
 
 `Payouts.ExecuteAsync` and `Payouts.BatchExecuteAsync` are idempotent on
@@ -662,7 +756,7 @@ The `examples/` directory has runnable programs you can copy from:
 - `InvoiceCreate` — accept an incoming crypto payment (FIAT or CRYPTO mode pay-in), select asset, wait for payment.
 - `UniswapSwap` — V2 swap via one-line ABI encoding.
 - `JettonTransfer` — TON Jetton transfer with auto-resolved wallet + memo.
-- `WebhookServer` — ASP.NET Core minimal API that verifies inbound payout / transaction / invoice webhooks.
+- `WebhookServer` — ASP.NET Core minimal API that verifies inbound payout / transaction / invoice / sweep webhooks.
 
 ```bash
 cd examples/Quickstart
@@ -728,8 +822,8 @@ for, with `ByExchange` naming which exchange each came from. Rate availability o
 ticker there is not a promise of deposits, sweeps or payouts in it.
 
 **How do I verify a Crypto Chief webhook signature?**
-`WebhookVerifier.Verify(apiKey, body, signature)` or
-`WebhookVerifier.VerifyAndDecode<T>(apiKey, body, signature)` for one-line
+`WebhookVerifier.Verify(apiKey, body, req.Headers)` over the raw body, or
+`WebhookVerifier.VerifyAndDecode<T>(apiKey, body, req.Headers)` for one-line
 typed dispatch.
 
 **Which blockchains does the crypto processing API support?**

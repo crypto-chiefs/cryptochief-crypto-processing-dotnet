@@ -38,7 +38,7 @@ public class WebhooksTests
         var d = await client.Webhooks.InfoAsync(DeliveryUuid);
 
         handler.Captured.Single().RequestUri!.AbsolutePath.Should().Be("/v1/webhooks/info");
-        handler.CapturedBodies.Single().Should().Be("{\"uuid\":\"" + DeliveryUuid + "\"}");
+        handler.CapturedBodies.Single().ShouldBeJson("{\"uuid\":\"" + DeliveryUuid + "\"}");
 
         d.Status.Should().Be(WebhookDeliveryStatus.Failed);
         d.LastHttpStatus.Should().Be(500);
@@ -68,7 +68,7 @@ public class WebhooksTests
         var result = await client.Webhooks.ResendStaticDepositAsync("dep-1");
 
         handler.Captured.Single().RequestUri!.AbsolutePath.Should().Be("/v1/static-deposits/resend");
-        handler.CapturedBodies.Single().Should().Be("{\"uuid\":\"dep-1\"}");
+        handler.CapturedBodies.Single().ShouldBeJson("{\"uuid\":\"dep-1\"}");
         result.Queued.Should().Be(1);
         result.Deliveries.Single().Queued.Should().BeTrue();
         result.Deliveries.Single().ResendCount.Should().Be(1);

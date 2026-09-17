@@ -27,9 +27,8 @@ public class CreditsTests
         req.RequestUri!.AbsolutePath.Should().Be("/v1/credits/balance");
         req.Headers.GetValues("Merchant").Should().ContainSingle().Which.Should().Be("M-1");
 
-        handler.CapturedBodies.Should().ContainSingle().Which.Should().Be("{}");
-        req.Headers.GetValues("Signature").Single().Should()
-            .Be(RequestSigner.Sign(Encoding.UTF8.GetBytes("{}"), "K-1"));
+        handler.CapturedBodies.Should().ContainSingle().Which.ShouldBeJson("{}");
+        Wire.ShouldBeSignedHmacV1(req, handler.CapturedBodies[0], "M-1", "K-1");
     }
 
     [Fact]
@@ -74,9 +73,8 @@ public class CreditsTests
 
         // Unset optional urls must be omitted from the wire, not sent as "".
         const string wire = "{\"amount\":\"25.00\",\"currency\":\"USDT\"}";
-        handler.CapturedBodies.Should().ContainSingle().Which.Should().Be(wire);
-        req.Headers.GetValues("Signature").Single().Should()
-            .Be(RequestSigner.Sign(Encoding.UTF8.GetBytes(wire), "K-1"));
+        handler.CapturedBodies.Should().ContainSingle().Which.ShouldBeJson(wire);
+        Wire.ShouldBeSignedHmacV1(req, handler.CapturedBodies[0], "M-1", "K-1");
 
         // Optional response fields absent → null.
         topup.InvoiceId.Should().Be(123_456);
@@ -108,13 +106,12 @@ public class CreditsTests
         var req = handler.Captured.Should().ContainSingle().Subject;
         req.RequestUri!.AbsolutePath.Should().Be("/v1/credits/topup");
 
-        // Canonical body: snake_case keys sorted lexicographically.
+        // Body: snake_case keys.
         const string wire = "{\"amount\":\"100.00\",\"currency\":\"USDC\","
             + "\"url_error\":\"https://shop.test/billing/fail\","
             + "\"url_success\":\"https://shop.test/billing/ok\"}";
-        handler.CapturedBodies.Should().ContainSingle().Which.Should().Be(wire);
-        req.Headers.GetValues("Signature").Single().Should()
-            .Be(RequestSigner.Sign(Encoding.UTF8.GetBytes(wire), "K-1"));
+        handler.CapturedBodies.Should().ContainSingle().Which.ShouldBeJson(wire);
+        Wire.ShouldBeSignedHmacV1(req, handler.CapturedBodies[0], "M-1", "K-1");
 
         topup.InvoiceId.Should().Be(987_654_321);
         topup.PaymentLink.Should().Be("https://pay.test/topup/def");

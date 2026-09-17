@@ -33,7 +33,10 @@ public class TransportTests
         req.Method.Should().Be(HttpMethod.Post);
         req.RequestUri!.AbsolutePath.Should().Be("/v1/payout/execute");
         req.Headers.GetValues("Merchant").Should().ContainSingle().Which.Should().Be("M-1");
-        req.Headers.GetValues("Signature").Single().Should().MatchRegex("^[a-f0-9]{32}$");
+        req.Headers.GetValues("X-CC-Timestamp").Single().Should().MatchRegex("^[0-9]+$");
+        req.Headers.GetValues("X-CC-Nonce").Single().Should().MatchRegex("^[0-9a-f]{32}$");
+        req.Headers.GetValues("X-CC-Signature").Single().Should().MatchRegex("^v1=[0-9a-f]{64}$");
+        req.Headers.Contains("Signature").Should().BeFalse();
     }
 
     [Fact]
@@ -123,6 +126,39 @@ public class TransportTests
             .Should().ThrowAsync<CryptoChiefApiException>();
 
         ex.Which.Code.Should().Be(ErrorCodes.ServiceError);
+    }
+
+    [Fact]
+    public async Task Contour_envelope_takes_the_code_from_details()
+    {
+        var handler = new CapturingHandler(_ => Resp(HttpStatusCode.PaymentRequired,
+            "{\"data\":null,\"error\":{\"status\":402,\"name\":\"PaymentRequiredError\","
+            + "\"message\":\"Top up the balance\",\"details\":{\"code\":\"INSUFFICIENT_FUNDS\"}}}"));
+        var client = NewClient(handler);
+
+        var ex = await FluentActions.Invoking(() => client.Payouts.InfoAsync("u-1"))
+            .Should().ThrowAsync<CryptoChiefApiException>();
+
+        ex.Which.Code.Should().Be(ErrorCodes.InsufficientFunds);
+        ex.Which.HttpStatus.Should().Be(HttpStatusCode.PaymentRequired);
+        ex.Which.Message.Should().Contain("Top up the balance");
+        ex.Which.RawBody.Should().Contain("PaymentRequiredError");
+    }
+
+    [Fact]
+    public async Task Contour_envelope_without_details_code_takes_the_error_name()
+    {
+        var handler = new CapturingHandler(_ => Resp(HttpStatusCode.BadRequest,
+            "{\"data\":null,\"error\":{\"status\":400,\"name\":\"ValidationError\","
+            + "\"message\":\"order_id is required\",\"details\":{}}}"));
+        var client = NewClient(handler);
+
+        var ex = await FluentActions.Invoking(() => client.Payouts.InfoAsync("u-1"))
+            .Should().ThrowAsync<CryptoChiefApiException>();
+
+        ex.Which.Code.Should().Be("ValidationError");
+        ex.Which.Message.Should().Contain("order_id is required");
+        ex.Which.IsRetryable.Should().BeFalse();
     }
 
     [Fact]

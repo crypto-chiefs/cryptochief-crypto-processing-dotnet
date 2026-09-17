@@ -29,9 +29,8 @@ public class CurrenciesTests
         req.Headers.GetValues("Merchant").Should().ContainSingle().Which.Should().Be("M-1");
 
         // Empty body, still signed.
-        handler.CapturedBodies.Should().ContainSingle().Which.Should().Be("{}");
-        req.Headers.GetValues("Signature").Single().Should()
-            .Be(RequestSigner.Sign(Encoding.UTF8.GetBytes("{}"), "K-1"));
+        handler.CapturedBodies.Should().ContainSingle().Which.ShouldBeJson("{}");
+        Wire.ShouldBeSignedHmacV1(req, handler.CapturedBodies[0], "M-1", "K-1");
 
         fiats.Should().HaveCount(3);
         fiats[0].Code.Should().Be("JMD");
@@ -61,9 +60,8 @@ public class CurrenciesTests
 
         var req = handler.Captured.Should().ContainSingle().Subject;
         req.RequestUri!.AbsolutePath.Should().Be("/v1/currencies/cryptos");
-        handler.CapturedBodies.Should().ContainSingle().Which.Should().Be("{}");
-        req.Headers.GetValues("Signature").Single().Should()
-            .Be(RequestSigner.Sign(Encoding.UTF8.GetBytes("{}"), "K-1"));
+        handler.CapturedBodies.Should().ContainSingle().Which.ShouldBeJson("{}");
+        Wire.ShouldBeSignedHmacV1(req, handler.CapturedBodies[0], "M-1", "K-1");
 
         cryptos.Quote.Should().Be("USDT");
         cryptos.Count.Should().Be(5);

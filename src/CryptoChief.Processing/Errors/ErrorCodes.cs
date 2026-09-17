@@ -34,6 +34,18 @@ public static class ErrorCodes
     public const string ContractCallsUnsupported = "CONTRACT_CALLS_UNSUPPORTED_ON_NETWORK";
     public const string NetworkError             = "NETWORK_ERROR";
 
+    /// <summary><c>Merchant</c> or an <c>X-CC-*</c> header is missing, repeated or malformed (HTTP 400).</summary>
+    public const string BadAuthHeaders           = "BAD_AUTH_HEADERS";
+    /// <summary><c>X-CC-Timestamp</c> is more than 300 s from server time (HTTP 401). The client corrects
+    /// its clock offset from <c>server_time</c> and retries once before raising it.</summary>
+    public const string SignatureTimestampOutOfRange = "SIGNATURE_TIMESTAMP_OUT_OF_RANGE";
+    /// <summary><c>X-CC-Signature</c> does not match (HTTP 401).</summary>
+    public const string InvalidSignature         = "INVALID_SIGNATURE";
+    /// <summary><c>X-CC-Nonce</c> was already used (HTTP 401).</summary>
+    public const string SignatureReplayed        = "SIGNATURE_REPLAYED";
+    /// <summary>The request body exceeds the endpoint's size limit (HTTP 413).</summary>
+    public const string PayloadTooLarge          = "PAYLOAD_TOO_LARGE";
+
     /// <summary>The object does not exist OR is not this project's — deliberately indistinguishable.</summary>
     public const string NotFound                 = "NOT_FOUND";
     /// <summary>Webhook resend: a newer event exists for the same object; only the latest may be resent. Permanent.</summary>

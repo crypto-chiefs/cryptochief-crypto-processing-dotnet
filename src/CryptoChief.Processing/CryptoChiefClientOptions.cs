@@ -45,7 +45,8 @@ public sealed class CryptoChiefClientOptions
     {
         if (string.IsNullOrWhiteSpace(MerchantId))
             throw new InvalidOperationException("CryptoChiefClientOptions.MerchantId is required.");
-        if (string.IsNullOrWhiteSpace(ApiKey))
+        // A key of nothing, or of spaces and tabs only, is no key: the server refuses it.
+        if (Http.RequestSigner.IsBlankApiKey(ApiKey))
             throw new InvalidOperationException("CryptoChiefClientOptions.ApiKey is required.");
         if (string.IsNullOrWhiteSpace(BaseUrl))
             throw new InvalidOperationException("CryptoChiefClientOptions.BaseUrl is required.");

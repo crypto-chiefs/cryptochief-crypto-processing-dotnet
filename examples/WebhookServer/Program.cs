@@ -1,4 +1,6 @@
+using System.Text.Json;
 using CryptoChief.Processing;
+using CryptoChief.Processing.Errors;
 using CryptoChief.Processing.Webhooks;
 using CryptoChief.Processing.Webhooks.Events;
 
@@ -14,24 +16,36 @@ var app = builder.Build();
 
 var apiKey = builder.Configuration["CryptoChief:ApiKey"]!;
 
+// Each handler verifies the raw body bytes against X-CC-Timestamp, X-Webhook-Delivery and
+// X-CC-Signature before parsing JSON. A redelivery carries the same X-Webhook-Delivery.
+//
+// Two ways a delivery can fail, answered apart: a signature the key does not confirm is 401,
+// a verified body that does not decode into the event type is 400. Both are decided answers -
+// letting either escape the handler would answer 5xx, which the platform retries.
 app.MapPost("/webhooks/payout", async (HttpRequest req) =>
 {
     using var ms = new MemoryStream();
     await req.Body.CopyToAsync(ms);
     var body = ms.ToArray();
-    var sig = req.Headers[WebhookVerifier.SignatureHeader].ToString();
     try
     {
-        var evt = WebhookVerifier.VerifyAndDecode<PayoutWebhookEvent>(apiKey, body, sig);
+        var evt = WebhookVerifier.VerifyAndDecode<PayoutWebhookEvent>(apiKey, body, req.Headers);
         app.Logger.LogInformation(
             "payout {Uuid}: {Status} (event={Event}, tx={ToAddress}, confirmations={Confirmations}/{Required})",
             evt.Uuid, evt.Status, evt.Event, evt.ToAddress, evt.Confirmations, evt.RequiredConfirmations);
         return Results.Ok();
     }
-    catch (Exception ex)
+    catch (WebhookVerificationException ex)
     {
-        app.Logger.LogWarning(ex, "webhook rejected");
+        app.Logger.LogWarning("webhook {Delivery} refused: {Reason}",
+            req.Headers[WebhookVerifier.DeliveryHeader].ToString(), ex.Message);
         return Results.Unauthorized();
+    }
+    catch (Exception ex) when (ex is JsonException or CryptoChiefException)
+    {
+        app.Logger.LogWarning("webhook {Delivery} verified but not decodable: {Reason}",
+            req.Headers[WebhookVerifier.DeliveryHeader].ToString(), ex.Message);
+        return Results.BadRequest();
     }
 });
 
@@ -40,19 +54,25 @@ app.MapPost("/webhooks/transaction", async (HttpRequest req) =>
     using var ms = new MemoryStream();
     await req.Body.CopyToAsync(ms);
     var body = ms.ToArray();
-    var sig = req.Headers[WebhookVerifier.SignatureHeader].ToString();
     try
     {
-        var evt = WebhookVerifier.VerifyAndDecode<TransactionWebhookEvent>(apiKey, body, sig);
+        var evt = WebhookVerifier.VerifyAndDecode<TransactionWebhookEvent>(apiKey, body, req.Headers);
         app.Logger.LogInformation(
             "tx {Uuid}: {Status} on {Network} (hash={TxHash}, confirmations={Confirmations}/{Required})",
             evt.Uuid, evt.Status, evt.Network, evt.TxHash, evt.Confirmations, evt.RequiredConfirmations);
         return Results.Ok();
     }
-    catch (Exception ex)
+    catch (WebhookVerificationException ex)
     {
-        app.Logger.LogWarning(ex, "webhook rejected");
+        app.Logger.LogWarning("webhook {Delivery} refused: {Reason}",
+            req.Headers[WebhookVerifier.DeliveryHeader].ToString(), ex.Message);
         return Results.Unauthorized();
+    }
+    catch (Exception ex) when (ex is JsonException or CryptoChiefException)
+    {
+        app.Logger.LogWarning("webhook {Delivery} verified but not decodable: {Reason}",
+            req.Headers[WebhookVerifier.DeliveryHeader].ToString(), ex.Message);
+        return Results.BadRequest();
     }
 });
 
@@ -61,19 +81,25 @@ app.MapPost("/webhooks/invoice", async (HttpRequest req) =>
     using var ms = new MemoryStream();
     await req.Body.CopyToAsync(ms);
     var body = ms.ToArray();
-    var sig = req.Headers[WebhookVerifier.SignatureHeader].ToString();
     try
     {
-        var evt = WebhookVerifier.VerifyAndDecode<PayInWebhookEvent>(apiKey, body, sig);
+        var evt = WebhookVerifier.VerifyAndDecode<PayInWebhookEvent>(apiKey, body, req.Headers);
         app.Logger.LogInformation(
             "invoice {Uuid}: {Status} (event={Event}, paid={Amount} {Coin})",
             evt.Uuid, evt.Status, evt.Event, evt.FactAmountCrypto ?? evt.AmountCrypto, evt.PaymentCoin);
         return Results.Ok();
     }
-    catch (Exception ex)
+    catch (WebhookVerificationException ex)
     {
-        app.Logger.LogWarning(ex, "webhook rejected");
+        app.Logger.LogWarning("webhook {Delivery} refused: {Reason}",
+            req.Headers[WebhookVerifier.DeliveryHeader].ToString(), ex.Message);
         return Results.Unauthorized();
+    }
+    catch (Exception ex) when (ex is JsonException or CryptoChiefException)
+    {
+        app.Logger.LogWarning("webhook {Delivery} verified but not decodable: {Reason}",
+            req.Headers[WebhookVerifier.DeliveryHeader].ToString(), ex.Message);
+        return Results.BadRequest();
     }
 });
 
@@ -91,10 +117,9 @@ app.MapPost("/webhooks/sweep", async (HttpRequest req) =>
     using var ms = new MemoryStream();
     await req.Body.CopyToAsync(ms);
     var body = ms.ToArray();
-    var sig = req.Headers[WebhookVerifier.SignatureHeader].ToString();
     try
     {
-        var evt = WebhookVerifier.VerifyAndDecode<SweepWebhookEvent>(apiKey, body, sig);
+        var evt = WebhookVerifier.VerifyAndDecode<SweepWebhookEvent>(apiKey, body, req.Headers);
         app.Logger.LogInformation(
             "sweep {TaskId}: {Amount} {Asset} {From} -> {Master} (tx={TxHash}, confirmations={Confirmations}/{Required}, trigger={TypeWork}, fee_usd={Fee})",
             evt.TaskId, evt.AmountHuman, evt.AssetSymbol, evt.WalletAddress, evt.ToAddress,
@@ -113,10 +138,17 @@ app.MapPost("/webhooks/sweep", async (HttpRequest req) =>
 
         return Results.Ok();
     }
-    catch (Exception ex)
+    catch (WebhookVerificationException ex)
     {
-        app.Logger.LogWarning(ex, "webhook rejected");
+        app.Logger.LogWarning("webhook {Delivery} refused: {Reason}",
+            req.Headers[WebhookVerifier.DeliveryHeader].ToString(), ex.Message);
         return Results.Unauthorized();
+    }
+    catch (Exception ex) when (ex is JsonException or CryptoChiefException)
+    {
+        app.Logger.LogWarning("webhook {Delivery} verified but not decodable: {Reason}",
+            req.Headers[WebhookVerifier.DeliveryHeader].ToString(), ex.Message);
+        return Results.BadRequest();
     }
 });
 

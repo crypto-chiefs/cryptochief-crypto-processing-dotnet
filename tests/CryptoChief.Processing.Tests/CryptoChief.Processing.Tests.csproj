@@ -22,4 +22,13 @@
     <ProjectReference Include="..\..\src\CryptoChief.Processing\CryptoChief.Processing.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- Kestrel for tests over real HTTP. -->
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="testdata\**" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
 </Project>

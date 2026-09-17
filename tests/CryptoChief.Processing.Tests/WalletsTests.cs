@@ -38,13 +38,11 @@ public class WalletsTests
         req.Method.Should().Be(HttpMethod.Post);
         req.RequestUri!.AbsolutePath.Should().Be("/v1/wallets/generate");
 
-        // Canonical body: snake_case keys sorted lexicographically. The label rides on
-        // every wallet type, not just static ones.
+        // Body: snake_case keys. The label rides on every wallet type, not just static ones.
         const string wire = "{\"chain_family\":\"EVM\",\"label\":\"Treasury EU\","
             + "\"wallet_type\":\"master\"}";
-        handler.CapturedBodies.Should().ContainSingle().Which.Should().Be(wire);
-        req.Headers.GetValues("Signature").Single().Should()
-            .Be(RequestSigner.Sign(Encoding.UTF8.GetBytes(wire), "K-1"));
+        handler.CapturedBodies.Should().ContainSingle().Which.ShouldBeJson(wire);
+        Wire.ShouldBeSignedHmacV1(req, handler.CapturedBodies[0], "M-1", "K-1");
 
         var handler2 = new CapturingHandler(_ => Resp(HttpStatusCode.OK,
             "{\"type\":\"master\",\"address\":\"0xbeef\",\"chain_family\":\"EVM\",\"frozen\":false,"
@@ -60,7 +58,7 @@ public class WalletsTests
         // Unnamed must stay off the wire: "" is a name of no characters the platform has
         // to reject, not the "no name" the caller meant.
         handler2.CapturedBodies.Should().ContainSingle().Which
-            .Should().Be("{\"chain_family\":\"EVM\",\"wallet_type\":\"master\"}");
+            .ShouldBeJson("{\"chain_family\":\"EVM\",\"wallet_type\":\"master\"}");
     }
 
     [Fact]
@@ -77,9 +75,8 @@ public class WalletsTests
         req.Headers.GetValues("Merchant").Should().ContainSingle().Which.Should().Be("M-1");
 
         const string wire = "{\"address\":\"0xdead\",\"master_wallet_address\":\"0xbeef\"}";
-        handler.CapturedBodies.Should().ContainSingle().Which.Should().Be(wire);
-        req.Headers.GetValues("Signature").Single().Should()
-            .Be(RequestSigner.Sign(Encoding.UTF8.GetBytes(wire), "K-1"));
+        handler.CapturedBodies.Should().ContainSingle().Which.ShouldBeJson(wire);
+        Wire.ShouldBeSignedHmacV1(req, handler.CapturedBodies[0], "M-1", "K-1");
 
         wallet.Type.Should().Be(WalletType.Static);
         wallet.Address.Should().Be("0xdead");
@@ -104,9 +101,8 @@ public class WalletsTests
 
         const string wire = "{\"address\":\"0xdead\","
             + "\"callback_url\":\"https://shop.test/hooks/deposit\"}";
-        handler.CapturedBodies.Should().ContainSingle().Which.Should().Be(wire);
-        req.Headers.GetValues("Signature").Single().Should()
-            .Be(RequestSigner.Sign(Encoding.UTF8.GetBytes(wire), "K-1"));
+        handler.CapturedBodies.Should().ContainSingle().Which.ShouldBeJson(wire);
+        Wire.ShouldBeSignedHmacV1(req, handler.CapturedBodies[0], "M-1", "K-1");
 
         wallet.CallbackUrl.Should().Be("https://shop.test/hooks/deposit");
     }
@@ -125,9 +121,8 @@ public class WalletsTests
         // so the empty string has to survive the serializer's null-dropping and reach the
         // wire — and the signature is over exactly that body.
         const string wire = "{\"address\":\"0xdead\",\"callback_url\":\"\"}";
-        handler.CapturedBodies.Should().ContainSingle().Which.Should().Be(wire);
-        handler.Captured[0].Headers.GetValues("Signature").Single().Should()
-            .Be(RequestSigner.Sign(Encoding.UTF8.GetBytes(wire), "K-1"));
+        handler.CapturedBodies.Should().ContainSingle().Which.ShouldBeJson(wire);
+        Wire.ShouldBeSignedHmacV1(handler.Captured[0], handler.CapturedBodies[0], "M-1", "K-1");
 
         // Cleared comes back as null, never as "".
         wallet.CallbackUrl.Should().BeNull();
@@ -151,9 +146,8 @@ public class WalletsTests
 
         // Exactly the two fields, and nothing else rides along.
         const string wire = "{\"address\":\"0xbeef\",\"label\":\"Treasury EU\"}";
-        handler.CapturedBodies.Should().ContainSingle().Which.Should().Be(wire);
-        req.Headers.GetValues("Signature").Single().Should()
-            .Be(RequestSigner.Sign(Encoding.UTF8.GetBytes(wire), "K-1"));
+        handler.CapturedBodies.Should().ContainSingle().Which.ShouldBeJson(wire);
+        Wire.ShouldBeSignedHmacV1(req, handler.CapturedBodies[0], "M-1", "K-1");
 
         wallet.Type.Should().Be(WalletType.Master);
         wallet.Label.Should().Be("Treasury EU");
@@ -173,9 +167,8 @@ public class WalletsTests
         // the empty string has to survive the serializer's null-dropping and reach the wire
         // — and the signature is over exactly that body.
         const string wire = "{\"address\":\"0xdead\",\"label\":\"\"}";
-        handler.CapturedBodies.Should().ContainSingle().Which.Should().Be(wire);
-        handler.Captured[0].Headers.GetValues("Signature").Single().Should()
-            .Be(RequestSigner.Sign(Encoding.UTF8.GetBytes(wire), "K-1"));
+        handler.CapturedBodies.Should().ContainSingle().Which.ShouldBeJson(wire);
+        Wire.ShouldBeSignedHmacV1(handler.Captured[0], handler.CapturedBodies[0], "M-1", "K-1");
 
         // Cleared comes back as null, never as "".
         wallet.Label.Should().BeNull();
@@ -262,14 +255,11 @@ public class WalletsTests
         req.Method.Should().Be(HttpMethod.Post);
         req.RequestUri!.AbsolutePath.Should().Be("/v1/wallets/history");
 
-        // Canonical body: snake_case keys sorted lexicographically, unset filters absent.
-        // The timezone offset's "+" reaches the wire as a U+002B escape — still the same
-        // JSON string to the platform, and the signature is over exactly these bytes.
+        // Body: snake_case keys, unset filters absent.
         const string wire = "{\"address\":\"TQrY8bYc2yQ8sM8nJ1sZ9c2Zx7L2wq7pQb\","
-            + "\"date_from\":\"2026-08-01T00:00:00\\u002B00:00\",\"page_size\":20}";
-        handler.CapturedBodies.Should().ContainSingle().Which.Should().Be(wire);
-        req.Headers.GetValues("Signature").Single().Should()
-            .Be(RequestSigner.Sign(Encoding.UTF8.GetBytes(wire), "K-1"));
+            + "\"date_from\":\"2026-08-01T00:00:00+00:00\",\"page_size\":20}";
+        handler.CapturedBodies.Should().ContainSingle().Which.ShouldBeJson(wire);
+        Wire.ShouldBeSignedHmacV1(req, handler.CapturedBodies[0], "M-1", "K-1");
 
         // A deposit wallet serves several orders over its lifetime; this is the list.
         page.Items.Should().HaveCount(2);
@@ -298,7 +288,7 @@ public class WalletsTests
         page.Items.Should().BeEmpty();
         page.Meta.Total.Should().Be(0);
         handler.CapturedBodies.Should().ContainSingle().Which
-            .Should().Be("{\"address\":\"0xNotOurs\"}");
+            .ShouldBeJson("{\"address\":\"0xNotOurs\"}");
     }
 
     private static HttpResponseMessage Resp(HttpStatusCode code, string body) =>

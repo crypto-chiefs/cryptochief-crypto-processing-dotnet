@@ -2,7 +2,6 @@ using System.Net;
 using System.Text;
 using System.Text.Json;
 using CryptoChief.Processing.Http;
-using CryptoChief.Processing.Internal;
 using CryptoChief.Processing.Models;
 using CryptoChief.Processing.Webhooks;
 using CryptoChief.Processing.Webhooks.Events;
@@ -186,10 +185,10 @@ public class SweepsTests
         var req = handler.Captured.Should().ContainSingle().Subject;
         req.RequestUri!.AbsolutePath.Should().Be("/v1/sweeps/history");
 
-        // Canonical body: snake_case keys sorted lexicographically. On this endpoint the
+        // Body: snake_case keys. On this endpoint the
         // search runs over the wallet address, both transaction hashes and the task id.
         const string wire = "{\"mode\":\"auto\",\"search\":\"0x77EDde\",\"status\":\"skipped\"}";
-        handler.CapturedBodies.Should().ContainSingle().Which.Should().Be(wire);
+        handler.CapturedBodies.Should().ContainSingle().Which.ShouldBeJson(wire);
 
         // Skipped is a normal outcome — a balance below the threshold — and asking for it
         // is the only way to see those, since an unfiltered page mixes them in.
@@ -213,7 +212,7 @@ public class SweepsTests
         handler.Captured[0].RequestUri!.AbsolutePath.Should().Be("/v1/sweeps/wallet/history");
         const string wire = "{\"address\":\"0x77EDde3213b70c9dd224C874c28f41B23B070f65\","
             + "\"search\":\"898cdbd0\",\"status\":\"failed\"}";
-        handler.CapturedBodies.Should().ContainSingle().Which.Should().Be(wire);
+        handler.CapturedBodies.Should().ContainSingle().Which.ShouldBeJson(wire);
     }
 
     [Fact]
@@ -227,7 +226,7 @@ public class SweepsTests
 
         // An empty status is a value the platform has to reject; "every status" is said by
         // leaving the key out.
-        handler.CapturedBodies.Should().ContainSingle().Which.Should().Be("{\"page\":2}");
+        handler.CapturedBodies.Should().ContainSingle().Which.ShouldBeJson("{\"page\":2}");
     }
 
     [Fact]
@@ -382,8 +381,8 @@ public class SweepsTests
         evt.RequiredConfirmations.Should().BeNull();
     }
 
-    private static string Sign(byte[] body) =>
-        RequestSigner.Sign(CanonicalJson.Canonicalise(body), "K-1");
+    private static Dictionary<string, IEnumerable<string>> Sign(byte[] body) =>
+        Wire.SignedWebhookHeaders("K-1", body);
 
     [Fact]
     public async Task History_stamps_completed_at_on_a_failed_sweep_too()

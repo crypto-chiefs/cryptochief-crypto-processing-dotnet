@@ -1,7 +1,6 @@
 using System.Net;
 using System.Text;
 using CryptoChief.Processing.Http;
-using CryptoChief.Processing.Internal;
 using CryptoChief.Processing.Models;
 using CryptoChief.Processing.Polling;
 using CryptoChief.Processing.Webhooks;
@@ -376,8 +375,8 @@ public class PayoutsTests
         return Encoding.UTF8.GetBytes(node.ToJsonString());
     }
 
-    private static string Sign(byte[] body) =>
-        RequestSigner.Sign(CanonicalJson.Canonicalise(body), ApiKey);
+    private static Dictionary<string, IEnumerable<string>> Sign(byte[] body) =>
+        Wire.SignedWebhookHeaders(ApiKey, body);
 
     private static HttpResponseMessage Resp(HttpStatusCode code, string body) =>
         new(code) { Content = new StringContent(body, Encoding.UTF8, "application/json") };

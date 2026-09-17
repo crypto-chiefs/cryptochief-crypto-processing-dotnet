@@ -31,9 +31,8 @@ public class BlockchainTests
         req.Headers.GetValues("Merchant").Should().ContainSingle().Which.Should().Be("M-1");
 
         // Nothing to filter by, but the empty object is still signed like every request.
-        handler.CapturedBodies.Should().ContainSingle().Which.Should().Be("{}");
-        req.Headers.GetValues("Signature").Single().Should()
-            .Be(RequestSigner.Sign(Encoding.UTF8.GetBytes("{}"), "K-1"));
+        handler.CapturedBodies.Should().ContainSingle().Which.ShouldBeJson("{}");
+        Wire.ShouldBeSignedHmacV1(req, handler.CapturedBodies[0], "M-1", "K-1");
 
         chains.Should().HaveCount(3);
         chains[0].Name.Should().Be(Chain.EthMainnet);
@@ -107,9 +106,8 @@ public class BlockchainTests
         req.RequestUri!.AbsolutePath.Should().Be("/v1/blockchain/contracts/list");
 
         // Platform-wide: nothing to filter by project, and the empty object is signed.
-        handler.CapturedBodies.Should().ContainSingle().Which.Should().Be("{}");
-        req.Headers.GetValues("Signature").Single().Should()
-            .Be(RequestSigner.Sign(Encoding.UTF8.GetBytes("{}"), "K-1"));
+        handler.CapturedBodies.Should().ContainSingle().Which.ShouldBeJson("{}");
+        Wire.ShouldBeSignedHmacV1(req, handler.CapturedBodies[0], "M-1", "K-1");
 
         catalogue.Items.Should().HaveCount(3);
 
