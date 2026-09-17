@@ -4,7 +4,7 @@ using System.Text;
 namespace CryptoChief.Processing.Tests;
 
 /// <summary>
-/// The gateway's HMAC v1 check, as processing-api-gateway/internal/auth implements it.
+/// The gateway's HMAC v1 check, re-implemented from the public signature spec.
 /// <para>The verifying side the SDK is tested against: the vector-driven test and the mock
 /// gateway the client talks to over HTTP both go through <see cref="Check"/>. The string to sign
 /// is built here from the received request, not with the SDK's signer.</para>
