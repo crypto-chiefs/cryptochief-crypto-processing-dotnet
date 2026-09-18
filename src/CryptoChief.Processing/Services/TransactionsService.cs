@@ -13,6 +13,16 @@ public sealed partial class TransactionsService
         Client.Transport.SendAsync<SignTransactionResponse>(
             "/v1/transaction/signature", request, cancellationToken);
 
+    /// <summary>
+    /// Quote the network fee of a transaction without signing or broadcasting it.
+    /// <see cref="TxType.Contract"/> is refused with
+    /// <see cref="Errors.ErrorCodes.ContractEstimateUnsupported"/>.
+    /// </summary>
+    public Task<EstimateTransactionResponse> EstimateAsync(
+        EstimateTransactionRequest request, CancellationToken cancellationToken = default) =>
+        Client.Transport.SendAsync<EstimateTransactionResponse>(
+            "/v1/transaction/estimate", request, cancellationToken);
+
     /// <summary>Broadcast a previously-signed transaction by uuid.</summary>
     public Task<TransactionInfo> ExecuteAsync(
         ExecuteTransactionRequest request, CancellationToken cancellationToken = default) =>

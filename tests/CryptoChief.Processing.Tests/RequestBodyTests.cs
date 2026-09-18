@@ -121,6 +121,13 @@ public class RequestBodyTests
                 Network = "ETH", FromAddress = Evm, Type = TxType.Native, ToAddress = null, Value = null, Contract = null, Calls = null, UrlCallback = null,
             }),
             """{"from_address":"0x742d35cc6634c0532925a3b844bc454e4438f44e","network":"ETH","type":"native"}"""),
+        ["transactions_estimate_null_optionals"] = (
+            c => c.Transactions.EstimateAsync(new EstimateTransactionRequest
+            {
+                Network = "ETH", FromAddress = Evm, Type = TxType.Token,
+                ToAddress = null, Value = null, Contract = null,
+            }),
+            """{"from_address":"0x742d35cc6634c0532925a3b844bc454e4438f44e","network":"ETH","type":"token"}"""),
         ["transactions_sign_call_null_optionals"] = (
             c => c.Transactions.SignAsync(new SignTransactionRequest
             {
@@ -142,6 +149,36 @@ public class RequestBodyTests
         ["credits_topup_null_urls"] = (
             c => c.Credits.TopupAsync(new CreditsTopupRequest { Amount = "10", Currency = "USD", UrlSuccess = null, UrlError = null }),
             """{"amount":"10","currency":"USD"}"""),
+        ["energy_quote_null_optionals"] = (
+            c => c.Energy.QuoteAsync(new EnergyQuoteRequest { ReceiveAddress = Tron, Energy = null, DurationSec = null }),
+            """{"receive_address":"TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t"}"""),
+        ["energy_rent_null_optionals"] = (
+            c => c.WithIdempotencyKey("k-1").Energy.RentAsync(new EnergyRentRequest
+            {
+                ReceiveAddress = Tron, Energy = null, DurationSec = null, QuoteRef = null,
+            }),
+            """{"receive_address":"TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t"}"""),
+        ["energy_order"] = (
+            c => c.Energy.OrderAsync("k-1"),
+            """{"key":"k-1"}"""),
+        ["native_quote"] = (
+            c => c.Native.QuoteAsync(new NativeQuoteRequest { Network = "TRON", ReceiveAddress = Tron, Amount = "0.05" }),
+            """{"network":"TRON","receive_address":"TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t","amount":"0.05"}"""),
+        ["native_buy_quote_ref"] = (
+            c => c.WithIdempotencyKey("k-1").Native.BuyAsync(new NativeBuyRequest
+            {
+                Network = null, ReceiveAddress = null, Amount = null, QuoteRef = "nq-1",
+            }),
+            """{"quote_ref":"nq-1"}"""),
+        ["native_buy_coin_parameters"] = (
+            c => c.WithIdempotencyKey("k-1").Native.BuyAsync(new NativeBuyRequest
+            {
+                Network = "TRON", ReceiveAddress = Tron, Amount = "0.05", QuoteRef = null,
+            }),
+            """{"network":"TRON","receive_address":"TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t","amount":"0.05"}"""),
+        ["native_order"] = (
+            c => c.Native.OrderAsync("k-1"),
+            """{"key":"k-1"}"""),
         ["currencies_convert_null_provider"] = (
             c => c.Currencies.FiatToCryptoAsync(new ConvertRequest { Provider = null, From = "USD", To = "BTC", Amount = "100" }),
             """{"amount":"100","from":"USD","to":"BTC"}"""),
@@ -230,6 +267,9 @@ public class RequestBodyTests
                 Path = request.RequestUri!.AbsolutePath,
                 Query = request.RequestUri.Query.TrimStart('?'),
                 Merchant = "M-1",
+                IdempotencyKey = request.Headers.TryGetValues("Idempotency-Key", out var key)
+                    ? string.Join(",", key)
+                    : string.Empty,
                 Body = body,
             }));
             HasMd5Header |= request.Headers.Contains("Signature");

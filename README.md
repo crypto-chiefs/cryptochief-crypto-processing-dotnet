@@ -91,7 +91,7 @@ named handlers) you add downstream.
 |---|---|---|
 | Single payout (incl. auto-convert swap) | `client.Payouts` | `EstimateAsync`, `ExecuteAsync`, `InfoAsync`, `HistoryAsync` |
 | Mass payout (up to 50 items) | `client.Payouts` | `BatchEstimateAsync`, `BatchExecuteAsync` |
-| Two-phase sign / broadcast for arbitrary txs | `client.Transactions` | `SignAsync`, `ExecuteAsync`, `InfoAsync`, `HistoryAsync` |
+| Two-phase sign / broadcast for arbitrary txs | `client.Transactions` | `EstimateAsync`, `SignAsync`, `ExecuteAsync`, `InfoAsync`, `HistoryAsync` |
 | EVM / TRON contract calls (incl. ERC-20 / TRC-20) | `client.Transactions` | `SignEvmCallAsync`, `SignTronCallAsync`, `Erc20TransferAsync` |
 | Solana programs | `client.Transactions` | `SignAnchorCallAsync`, `SignSolanaCallAsync` |
 | TON contract calls (Jetton / NFT / text) | `client.Transactions` | `JettonTransferAsync`, `NftTransferAsync`, `SendTonCommentAsync`, `SignTonCallAsync` |
@@ -103,6 +103,8 @@ named handlers) you add downstream.
 | On-chain queries | `client.Blockchain` | `ContractsAvailableAsync`, `ContractsListAsync`, `BlockchainsListAsync`, `WalletBalanceAsync`, `TransactionStatusAsync` |
 | Fiat ↔ crypto rates and catalogues | `client.Currencies` | `FiatToCryptoAsync`, `CryptoToFiatAsync`, `FiatsAsync`, `CryptosAsync` |
 | Credits balance & top-up (billing-exempt) | `client.Credits` | `BalanceAsync`, `TopupAsync` |
+| TRON energy rental (billed to credits) | `client.Energy` | `QuoteAsync`, `RentAsync`, `OrderAsync` |
+| Native coin purchase (billed to credits) | `client.Native` | `QuoteAsync`, `BuyAsync`, `OrderAsync` |
 
 ## Payout with confirmation
 
@@ -184,6 +186,33 @@ await client.Transactions.ExecuteAsync(new ExecuteTransactionRequest { Uuid = si
 `ExecuteAsync`, `InfoAsync`, `HistoryAsync` and the `transaction.*` webhook. The webhook is sent
 only on a final status; to follow the count, poll `InfoAsync`. On `confirmed`,
 `Confirmations` >= `RequiredConfirmations`.
+
+`Transactions.EstimateAsync` quotes the network fee **without signing or broadcasting** and
+leaves no record — the same request as `SignAsync` minus `UrlCallback`. `TxType.Contract` is
+refused with `CONTRACT_ESTIMATE_UNSUPPORTED`.
+
+```csharp
+var est = await client.Transactions.EstimateAsync(new EstimateTransactionRequest
+{
+    Network     = Chain.EthSepolia,
+    FromAddress = "0xYourWallet...",
+    Type        = TxType.Native,
+    ToAddress   = "0xRecipient...",
+    Value       = wei.ToString(), // base units (wei)
+});
+```
+
+`EstimateTransactionResponse`: `EstimatedFee` — the network fee in the native coin
+(human-readable); `Required` — the total native coin the from-wallet must hold (fee + value
+for a native transfer, fee alone for a token one). `EstimatedFeeFiat` / `RequiredFiat` are the
+same in USD and are empty strings when the rate is unavailable.
+
+On TRON the response also carries a fee breakdown: `FeeExpected` (what will actually be
+charged given the wallet's current staked / delegated / rented energy pool — not a guarantee,
+the pool can run out), `FeeLimit` (the on-chain cap written into the transaction), `Energy`
+(units needed) and `EnergyFee` + `BandwidthFee` + `ActivationFee`, which add up to
+`EstimatedFee`. `ActivationFee` is sent only on a native transfer to an address that does not
+exist on chain yet. Off TRON all of these are `null`.
 
 ## Contract calls — the easy way
 
@@ -960,6 +989,83 @@ else if (wd.IsTerminal)
 `HistoryAsync` returns the same shape per item and pages by `Page`, `PageSize`, `DateFrom`
 and `DateTo`; it has no status filter. `Error`, `ConfirmedAt`, `UpdatedAt`, `Contract` and
 `AmountFiat` are not sent and stay `null`; use `ErrorReason` and `CompletedAt`.
+
+## Renting TRON energy
+
+A TRON transfer is cheaper when its energy is rented than when TRX is burnt.
+`client.Energy` prices a rental, places it, and reads it back — charges go to the same
+project credits balance as everything else. `receive_address` is the sender of the transfer
+the energy pays for.
+
+```csharp
+// Free quote: the rent price next to what burning TRX would cost (Burn*) and the Saving*.
+var quote = await client.Energy.QuoteAsync(new EnergyQuoteRequest
+{
+    ReceiveAddress = "TSender...", // who sends the transfer
+    Energy         = 65_000,       // optional — platform default when null
+});
+
+// Rent is synchronous and requires an Idempotency-Key (400 without it): by the time it
+// answers, the energy is either delegated or the refusal reason is known.
+var order = await client.WithIdempotencyKey("energy-order-42").Energy.RentAsync(
+    new EnergyRentRequest { ReceiveAddress = "TSender...", QuoteRef = quote.Ref });
+
+if (order.Status == EnergyOrderStatus.Delivered)
+    Console.WriteLine($"{order.DeliveredEnergy} energy delegated for {order.Credits} credits");
+else
+    Console.WriteLine($"{order.Status}: {order.Error} ({order.ErrorCode})"); // Credits is null when nothing was charged
+
+// Same order again later, by its idempotency key:
+var again = await client.Energy.OrderAsync("energy-order-42");
+```
+
+A refused order (HTTP 502, or 402 when the credits balance is short) and an unresolved one
+(HTTP 409, `NeedsAttention` set) come back **as the order**, not as an exception — the `else`
+branch above is where they land. A retry with the same key returns the same order rather than
+renting twice; re-attempt a refusal with a NEW key. A `NeedsAttention` order must **not** be
+retried — the energy may already be delegated; follow it with `OrderAsync`. Failures with no
+order to report (an error envelope, a gateway error page) throw a `CryptoChiefApiException`
+as usual.
+
+## Buying native coin with credits
+
+The platform sells native coin (TRX, ETH, BNB, SOL, TON, ...) from its own liquidity, billed
+to your project credits balance. The price covers the coins at the market rate plus the fee of
+the platform's own transfer — the transfer fee is included, nothing else is charged on top.
+`total_usd` is the full sale price and `credits` is the exact amount charged to the balance.
+`receive_address` is any address you want the coin on.
+
+```csharp
+// Free quote: the coin cost, the platform's transfer fee and the credits total.
+var quote = await client.Native.QuoteAsync(new NativeQuoteRequest
+{
+    Network        = "TRON",
+    ReceiveAddress = "TRecipient...",
+    Amount         = "0.05", // human units
+});
+
+// Buy is synchronous and requires an Idempotency-Key (400 without it): by the time it
+// answers, the coin is either sent or the refusal reason is known.
+var order = await client.WithIdempotencyKey("native-order-42").Native.BuyAsync(
+    new NativeBuyRequest { QuoteRef = quote.Ref }); // or Network + ReceiveAddress + Amount
+
+if (order.Status == NativeOrderStatus.Delivered)
+    Console.WriteLine($"{order.Amount} sent as {order.TxHash} for {order.Credits} credits");
+else
+    Console.WriteLine($"{order.Status}: {order.Error} ({order.ErrorCode})"); // Credits is null when nothing was charged
+
+// Same order again later, by its idempotency key:
+var again = await client.Native.OrderAsync("native-order-42");
+```
+
+A refused order (HTTP 502, or 402 when the credits balance is short) and an unresolved one
+(HTTP 409, `NeedsAttention` set) come back **as the order**, not as an exception — the `else`
+branch above is where they land. A retry with the same key returns the same order rather than
+buying twice; a NEW key re-attempts the purchase. A `NeedsAttention` order must **not** be
+retried — the coins may already be sent; follow it with `OrderAsync`. Failures with no order
+to report throw a `CryptoChiefApiException`: a 409 `QUOTE_EXPIRED` or `QUOTE_ALREADY_USED`
+means quote again (a quote lives about 90 seconds and is single-use), a 402
+`INSUFFICIENT_CREDITS` envelope means the credits balance needs a top-up.
 
 ## Documentation
 

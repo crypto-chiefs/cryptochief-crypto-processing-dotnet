@@ -46,6 +46,8 @@ public sealed class CryptoChiefClient
     public BlockchainService Blockchain { get; }
     public CurrenciesService Currencies { get; }
     public CreditsService Credits { get; }
+    public EnergyService Energy { get; }
+    public NativeService Native { get; }
     public WebhooksService Webhooks { get; }
 
     public CryptoChiefClient(string merchantId, string apiKey)
@@ -84,6 +86,8 @@ public sealed class CryptoChiefClient
         Blockchain     = new BlockchainService(this);
         Currencies     = new CurrenciesService(this);
         Credits        = new CreditsService(this);
+        Energy         = new EnergyService(this);
+        Native         = new NativeService(this);
         Webhooks       = new WebhooksService(this);
     }
 
@@ -105,6 +109,8 @@ public sealed class CryptoChiefClient
         Blockchain     = new BlockchainService(this);
         Currencies     = new CurrenciesService(this);
         Credits        = new CreditsService(this);
+        Energy         = new EnergyService(this);
+        Native         = new NativeService(this);
         Webhooks       = new WebhooksService(this);
     }
 

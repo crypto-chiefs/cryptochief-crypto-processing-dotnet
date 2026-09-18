@@ -60,6 +60,75 @@ public sealed record SignTransactionResponse
     public string? Network { get; init; }
 }
 
+public sealed record EstimateTransactionRequest
+{
+    public required string Network { get; init; }
+    public required string FromAddress { get; init; }
+    public required string Type { get; init; }
+
+    public string? ToAddress { get; init; }
+
+    /// <summary>Base units (e.g. wei) — NOT human amount.</summary>
+    public string? Value { get; init; }
+
+    /// <summary>Token contract address; <see cref="TxType.Token"/> only.</summary>
+    public string? Contract { get; init; }
+}
+
+/// <summary>
+/// A fee quote for a transaction that is neither signed nor broadcast and leaves no record.
+/// </summary>
+public sealed record EstimateTransactionResponse
+{
+    public string Network { get; init; } = string.Empty;
+    public string ChainFamily { get; init; } = string.Empty;
+    public string Type { get; init; } = string.Empty;
+    public string FromAddress { get; init; } = string.Empty;
+    public string ToAddress { get; init; } = string.Empty;
+
+    /// <summary>Network fee in the chain's native coin, human units.</summary>
+    public string EstimatedFee { get; init; } = string.Empty;
+
+    /// <summary><see cref="EstimatedFee"/> in USD; empty when the rate is unavailable.</summary>
+    public string EstimatedFeeFiat { get; init; } = string.Empty;
+
+    /// <summary>
+    /// Total native coin the from-wallet must hold for the transfer to go through:
+    /// fee + value for a native transfer, fee alone for a token one.
+    /// </summary>
+    public string Required { get; init; } = string.Empty;
+
+    /// <summary><see cref="Required"/> in USD; empty when the rate is unavailable.</summary>
+    public string RequiredFiat { get; init; } = string.Empty;
+
+    /// <summary>
+    /// TRON only: the fee expected to actually be charged given the from-wallet's current
+    /// energy pool (staked, delegated or rented energy is spent before TRX is burnt).
+    /// Not a guarantee — the pool can run out before the transaction is broadcast;
+    /// <see cref="EstimatedFee"/> stays the gross figure.
+    /// </summary>
+    public string? FeeExpected { get; init; }
+
+    /// <summary>TRON only: the on-chain fee cap (TRX) written into the transaction.</summary>
+    public string? FeeLimit { get; init; }
+
+    /// <summary>TRON only: energy units the transaction needs.</summary>
+    public long? Energy { get; init; }
+
+    /// <summary>TRON only: TRX the energy costs when burnt rather than covered by a pool.</summary>
+    public string? EnergyFee { get; init; }
+
+    /// <summary>TRON only: TRX the bandwidth costs.</summary>
+    public string? BandwidthFee { get; init; }
+
+    /// <summary>
+    /// TRON only: TRX for activating a new address — sent on a native transfer to an address
+    /// that does not exist on chain yet. <see cref="EnergyFee"/> + <see cref="BandwidthFee"/> +
+    /// <see cref="ActivationFee"/> add up to <see cref="EstimatedFee"/>.
+    /// </summary>
+    public string? ActivationFee { get; init; }
+}
+
 public sealed record ExecuteTransactionRequest
 {
     public required string Uuid { get; init; }

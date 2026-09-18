@@ -32,6 +32,7 @@ public static class ErrorCodes
     public const string CallsRequired            = "CALLS_REQUIRED";
     public const string CallsNotAllowed          = "CALLS_NOT_ALLOWED_FOR_TRANSFER";
     public const string ContractCallsUnsupported = "CONTRACT_CALLS_UNSUPPORTED_ON_NETWORK";
+    public const string ContractEstimateUnsupported = "CONTRACT_ESTIMATE_UNSUPPORTED";
     public const string NetworkError             = "NETWORK_ERROR";
 
     /// <summary><c>Merchant</c> or an <c>X-CC-*</c> header is missing, repeated or malformed (HTTP 400).</summary>

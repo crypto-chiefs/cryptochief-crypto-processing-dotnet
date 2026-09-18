@@ -233,7 +233,7 @@ internal sealed class CryptoChiefHttpTransport
                 skipDelay = true;
                 continue;
             }
-            if ((int)status >= 500 && attempt + 1 < attempts)
+            if ((int)status >= 500 && attempt + 1 < attempts && !IsOrderBody(respBody))
             {
                 last = apiErr;
                 continue;
@@ -325,11 +325,31 @@ internal sealed class CryptoChiefHttpTransport
         return i < 0 ? string.Empty : url.Substring(i);
     }
 
+    // A non-2xx body that carries an order view ("id" + "status", as energy rent / native buy
+    // send on a refused order) is a settled business outcome, not a transient failure — retrying
+    // it would only wait. The service layer recovers the order from CryptoChiefApiException.RawBody.
+    private static bool IsOrderBody(byte[] body)
+    {
+        try
+        {
+            using var doc = JsonDocument.Parse(body);
+            var root = doc.RootElement;
+            return root.ValueKind == JsonValueKind.Object
+                && root.TryGetProperty("id", out _)
+                && root.TryGetProperty("status", out _);
+        }
+        catch (JsonException)
+        {
+            return false;
+        }
+    }
+
     // Error bodies:
     //   gateway: {"ok":false,"error":"CODE","msg":"...","server_time":...}
     //            {"ok":false,"error":"SERVICE_ERROR","msg":"CODE"}
     //   contour: {"data":null,"error":{"status":...,"name":"...","message":"...",
     //             "details":{"code":"CODE","server_time":...}},"server_time":...}
+    //   order:   the order view with "error_code" (machine code) and "error" (human text)
     private static CryptoChiefApiException ParseApiError(HttpStatusCode status, byte[] body, out long? serverTime)
     {
         string? code = null, message = null;
@@ -351,10 +371,13 @@ internal sealed class CryptoChiefHttpTransport
                 }
                 else
                 {
-                    // Gateway. The code is in "error"; for SERVICE_ERROR it is in "msg".
+                    // Gateway. Order bodies carry the machine code in "error_code" with "error"
+                    // holding the human text; plain envelopes carry the code in "error" — for
+                    // SERVICE_ERROR it is in "msg".
                     var err = ReadString(root, "error");
                     var msg = ReadString(root, "msg");
-                    code = err is not null && err != ErrorCodes.ServiceError ? err : msg ?? err;
+                    code = ReadString(root, "error_code")
+                        ?? (err is not null && err != ErrorCodes.ServiceError ? err : msg ?? err);
                     message = msg ?? err;
                 }
             }
