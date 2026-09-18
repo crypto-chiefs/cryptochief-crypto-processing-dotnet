@@ -39,7 +39,8 @@ public class HmacV1SigningTests
 
         RequestSigner.BodySha256(v.BodyBytes).Should().Be(v.BodySha256);
         RequestSigner.HmacV1StringToSign(v.ToInput()).Should().Be(v.StringToSign);
-        RequestSigner.SignHmacV1(v.ApiKey, v.ToInput()).Should().Be(v.Signature);
+        RequestSigner.SignHmacV1(v.ApiKey, v.ToInput()).Should()
+            .Be(RequestSigner.HmacV1SignaturePrefix + v.Signature);
     }
 
     [Theory]
@@ -72,7 +73,8 @@ public class HmacV1SigningTests
         var lower = WithMethod(v.ToInput(), "get");
 
         RequestSigner.HmacV1StringToSign(lower).Should().Be(v.StringToSign);
-        RequestSigner.SignHmacV1(v.ApiKey, lower).Should().Be(v.Signature);
+        RequestSigner.SignHmacV1(v.ApiKey, lower).Should()
+            .Be(RequestSigner.HmacV1SignaturePrefix + v.Signature);
     }
 
     [Fact]
@@ -82,7 +84,8 @@ public class HmacV1SigningTests
 
         v.Method.Should().Be("post");
         v.StringToSign.Split('\n')[3].Should().Be("POST");
-        RequestSigner.SignHmacV1(v.ApiKey, v.ToInput()).Should().Be(v.Signature);
+        RequestSigner.SignHmacV1(v.ApiKey, v.ToInput()).Should()
+            .Be(RequestSigner.HmacV1SignaturePrefix + v.Signature);
     }
 
     // Only a-z is upper-cased: an HTTP method is an RFC 9110 token, and a Unicode mapping would
@@ -137,7 +140,27 @@ public class HmacV1SigningTests
     {
         var v = HmacV1Vectors.Get("body_whitespace_and_line_breaks");
         v.Body.Should().Contain("\r\n");
-        RequestSigner.SignHmacV1(v.ApiKey, v.ToInput()).Should().Be(v.Signature);
+        RequestSigner.SignHmacV1(v.ApiKey, v.ToInput()).Should()
+            .Be(RequestSigner.HmacV1SignaturePrefix + v.Signature);
+    }
+
+    // The signed value goes into X-CC-Signature as it is, and the gateway accepts the request.
+    [Fact]
+    public void Signed_header_value_passes_the_gateway_check()
+    {
+        var v = HmacV1Vectors.Get("empty_body");
+        var signature = RequestSigner.SignHmacV1(v.ApiKey, v.ToInput());
+
+        var request = new GatewayHmacV1.SignedRequest(v.Method, v.Path, v.Query, v.BodyBytes,
+            new[]
+            {
+                new KeyValuePair<string, string>(GatewayHmacV1.MerchantHeader, v.Merchant),
+                new KeyValuePair<string, string>(GatewayHmacV1.TimestampHeader, v.Timestamp),
+                new KeyValuePair<string, string>(GatewayHmacV1.NonceHeader, v.Nonce),
+                new KeyValuePair<string, string>(GatewayHmacV1.SignatureHeader, signature),
+            });
+
+        GatewayHmacV1.Check(request, v.ApiKey, v.Now).Should().Be(GatewayHmacV1.Ok);
     }
 
     // A key of nothing, or of spaces and tabs only, is no key: the signer refuses it and the
@@ -182,7 +205,7 @@ public class HmacV1SigningTests
         var v = HmacV1Vectors.Get("empty_body");
 
         RequestSigner.IsBlankApiKey(apiKey).Should().BeFalse();
-        RequestSigner.SignHmacV1(apiKey, v.ToInput()).Should().MatchRegex("^[0-9a-f]{64}$");
+        RequestSigner.SignHmacV1(apiKey, v.ToInput()).Should().MatchRegex("^v1=[0-9a-f]{64}$");
     }
 
     [Fact]

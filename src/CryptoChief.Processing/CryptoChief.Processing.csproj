@@ -12,7 +12,7 @@
 
   <PropertyGroup Label="NuGet">
     <PackageId>CryptoChief.Processing</PackageId>
-    <Version>0.11.0</Version>
+    <Version>0.12.0</Version>
     <Authors>Crypto Chief</Authors>
     <Company>Crypto Chief</Company>
     <Product>Crypto Chief Processing .NET SDK</Product>
@@ -29,7 +29,7 @@
     <PublishRepositoryUrl>true</PublishRepositoryUrl>
     <EmbedUntrackedSources>true</EmbedUntrackedSources>
     <DebugType>portable</DebugType>
-    <PackageReleaseNotes>0.11.0 — Transactions.EstimateAsync (POST /v1/transaction/estimate): quote the network fee without signing or broadcasting; the TRON answer breaks the fee down into Energy/EnergyFee, BandwidthFee and ActivationFee, plus FeeExpected/FeeLimit. New EnergyService (TRON energy rental paid from API credits): QuoteAsync, RentAsync, OrderAsync. New NativeService (buy native coin for API credits): QuoteAsync, BuyAsync, OrderAsync. Refused and unresolved energy/native orders now come back as the order itself (HTTP 402/409/502) with a machine-readable ErrorCode instead of a thrown error, so a settled business refusal is not retried as a transient failure; estimate infrastructure failures surface as 502 ESTIMATE_UNAVAILABLE. CI hygiene: .gitattributes pins test-vector checkouts to LF.</PackageReleaseNotes>
+    <PackageReleaseNotes>0.12.0 — Breaking for direct callers of RequestSigner.SignHmacV1: it now returns the full X-CC-Signature header value (v1= + hex), matching RequestSigner.SignWebhookV1. Requests sent through the client are unchanged.</PackageReleaseNotes>
   </PropertyGroup>
 
   <ItemGroup>

@@ -52,8 +52,8 @@ public static class RequestSigner
     }
 
     /// <summary>
-    /// HMAC v1 signature: lowercase hex <c>HMAC-SHA256(key = UTF-8 apiKey, message = HmacV1StringToSign(input))</c>.
-    /// The <c>X-CC-Signature</c> header value is <c>"v1=" + signature</c>.
+    /// HMAC v1 signature as the <c>X-CC-Signature</c> header value:
+    /// <c>"v1=" + lowercase hex HMAC-SHA256(key = UTF-8 apiKey, message = HmacV1StringToSign(input))</c>.
     /// </summary>
     /// <exception cref="ArgumentException">Blank API key, or a field contains CR or LF.</exception>
     public static string SignHmacV1(string apiKey, HmacV1Input input)
@@ -63,7 +63,7 @@ public static class RequestSigner
 
         var message = Encoding.UTF8.GetBytes(HmacV1StringToSign(input));
         using var hmac = new HMACSHA256(Encoding.UTF8.GetBytes(apiKey));
-        return ToHexLower(hmac.ComputeHash(message));
+        return HmacV1SignaturePrefix + ToHexLower(hmac.ComputeHash(message));
     }
 
     /// <summary>

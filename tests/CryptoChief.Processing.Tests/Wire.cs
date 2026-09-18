@@ -81,7 +81,7 @@ internal static class Wire
             Merchant = merchant,
             Body = Encoding.UTF8.GetBytes(body),
         });
-        req.Headers.GetValues("X-CC-Signature").Should().ContainSingle().Which.Should().Be("v1=" + expected);
+        req.Headers.GetValues("X-CC-Signature").Should().ContainSingle().Which.Should().Be(expected);
     }
 
     /// <summary>Headers of a webhook signed now with <paramref name="apiKey"/>.</summary>

@@ -289,7 +289,7 @@ public class HmacV1TransportTests
         handler.Requests.Select(r => Encoding.UTF8.GetString(r.Body)).Distinct().Should().ContainSingle();
 
         foreach (var req in handler.Requests)
-            req.Header("X-CC-Signature").Should().Be("v1=" + Recompute(req, "M-1", "K-1"));
+            req.Header("X-CC-Signature").Should().Be(Recompute(req, "M-1", "K-1"));
     }
 
     [Fact]
@@ -306,7 +306,7 @@ public class HmacV1TransportTests
         Encoding.UTF8.GetString(req.Body).Should()
             .Be("{\"page\":9007199254740993,\"max\":9223372036854775807,\"amount\":1.10}");
         req.Headers.Should().NotContainKey("Signature");
-        req.Header("X-CC-Signature").Should().Be("v1=" + Recompute(req, "M-1", "K-1"));
+        req.Header("X-CC-Signature").Should().Be(Recompute(req, "M-1", "K-1"));
     }
 
     [Fact]
@@ -319,7 +319,7 @@ public class HmacV1TransportTests
 
         var req = handler.Requests.Should().ContainSingle().Subject;
         req.Body.Should().BeEmpty();
-        req.Header("X-CC-Signature").Should().Be("v1=" + Recompute(req, "M-1", "K-1"));
+        req.Header("X-CC-Signature").Should().Be(Recompute(req, "M-1", "K-1"));
     }
 
     [Fact]
@@ -339,7 +339,7 @@ public class HmacV1TransportTests
         handler.Requests[0].Header("X-CC-Timestamp").Should().Be(T.ToString());
         handler.Requests[1].Header("X-CC-Timestamp").Should().Be((T + 1000).ToString());
         handler.Requests[1].Header("X-CC-Nonce").Should().NotBe(handler.Requests[0].Header("X-CC-Nonce"));
-        handler.Requests[1].Header("X-CC-Signature").Should().Be("v1=" + Recompute(handler.Requests[1], "M-1", "K-1"));
+        handler.Requests[1].Header("X-CC-Signature").Should().Be(Recompute(handler.Requests[1], "M-1", "K-1"));
         client.Transport.ClockOffsetSeconds.Should().Be(1000);
 
         // The offset stays for later requests.
@@ -418,7 +418,7 @@ public class HmacV1TransportTests
         handler.Requests[0].Header("X-CC-Timestamp").Should().Be(T.ToString());
         handler.Requests[1].Header("X-CC-Timestamp").Should().Be((T + 1000).ToString());
         handler.Requests[1].Header("X-CC-Nonce").Should().NotBe(handler.Requests[0].Header("X-CC-Nonce"));
-        handler.Requests[1].Header("X-CC-Signature").Should().Be("v1=" + Recompute(handler.Requests[1], "M-1", "K-1"));
+        handler.Requests[1].Header("X-CC-Signature").Should().Be(Recompute(handler.Requests[1], "M-1", "K-1"));
         client.Transport.ClockOffsetSeconds.Should().Be(1000);
     }
 

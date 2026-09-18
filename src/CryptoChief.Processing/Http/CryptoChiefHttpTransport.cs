@@ -269,8 +269,7 @@ internal sealed class CryptoChiefHttpTransport
             req.Headers.TryAddWithoutValidation(HeaderIdempotencyKey, _idempotencyKey);
         req.Headers.TryAddWithoutValidation(HeaderTimestamp, input.Timestamp);
         req.Headers.TryAddWithoutValidation(HeaderNonce, input.Nonce);
-        req.Headers.TryAddWithoutValidation(HeaderHmacSignature,
-            RequestSigner.HmacV1SignaturePrefix + signature);
+        req.Headers.TryAddWithoutValidation(HeaderHmacSignature, signature);
     }
 
     // The route ends at the query or the fragment; neither is part of the path the server

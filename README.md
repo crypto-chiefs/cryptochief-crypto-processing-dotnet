@@ -767,7 +767,7 @@ var signature = RequestSigner.SignHmacV1(apiKey, new HmacV1Input
     Merchant  = merchantId,
     Body      = bodyBytes,
 });
-// X-CC-Signature: v1={signature}
+// X-CC-Signature: {signature} — the value already carries the v1= prefix
 ```
 
 ## Idempotency

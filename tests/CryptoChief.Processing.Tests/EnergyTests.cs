@@ -319,7 +319,7 @@ public class EnergyTests
             IdempotencyKey = key,
             Body = Encoding.UTF8.GetBytes(body),
         });
-        return req.Headers.GetValues("X-CC-Signature").Single() == "v1=" + expected;
+        return req.Headers.GetValues("X-CC-Signature").Single() == expected;
     }
 
     private static HttpResponseMessage Resp(HttpStatusCode code, string body) =>

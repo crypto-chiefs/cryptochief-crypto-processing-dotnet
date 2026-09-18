@@ -259,7 +259,7 @@ public class RequestBodyTests
             var body = request.Content is null ? Array.Empty<byte>() : await request.Content.ReadAsByteArrayAsync(cancellationToken);
             Bodies.Add(body);
             Signatures.Add(string.Join(",", request.Headers.GetValues("X-CC-Signature")));
-            ExpectedSignatures.Add("v1=" + RequestSigner.SignHmacV1("K-1", new HmacV1Input
+            ExpectedSignatures.Add(RequestSigner.SignHmacV1("K-1", new HmacV1Input
             {
                 Timestamp = request.Headers.GetValues("X-CC-Timestamp").Single(),
                 Nonce = request.Headers.GetValues("X-CC-Nonce").Single(),
