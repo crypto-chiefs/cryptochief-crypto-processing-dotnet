@@ -26,6 +26,24 @@ public static class ErrorCodes
     public const string AlreadyExecuted          = "ALREADY_EXECUTED";
     public const string PreflightFailed          = "PREFLIGHT_FAILED";
     public const string BroadcastFailed          = "BROADCAST_FAILED";
+
+    /// <summary>
+    /// EVM execute: a lower nonce of the address is held by another signature that was not
+    /// executed. Nothing was sent; the transaction's <c>ErrorReason</c> names that signature
+    /// when it is known. Execute it first, then retry the same uuid.
+    /// </summary>
+    public const string NonceGap                 = "NONCE_GAP";
+
+    /// <summary>EVM execute: the chain already used this transaction's nonce. Nothing was sent by this call.</summary>
+    public const string NonceAlreadyUsed         = "NONCE_ALREADY_USED";
+
+    /// <summary>
+    /// EVM sign: an earlier signature from the same address has an execute whose outcome is not
+    /// known yet. The code may carry that signature's uuid
+    /// (<c>PREVIOUS_EXECUTE_UNRESOLVED: uuid=&lt;uuid&gt;</c>); compare with <c>StartsWith</c>.
+    /// Retry execute of that uuid instead of signing again.
+    /// </summary>
+    public const string PreviousExecuteUnresolved = "PREVIOUS_EXECUTE_UNRESOLVED";
     public const string SignedTxMismatch         = "SIGNED_TX_MISMATCH";
     public const string ContractRequired         = "CONTRACT_REQUIRED_FOR_TOKEN";
     public const string TransferFieldsForbid     = "TRANSFER_FIELDS_NOT_ALLOWED_FOR_CONTRACT";

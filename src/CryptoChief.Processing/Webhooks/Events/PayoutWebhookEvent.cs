@@ -39,6 +39,10 @@ public sealed record PayoutWebhookEvent
     public string? ErrorReason { get; init; }
 }
 
+/// <summary>
+/// <c>transaction.confirmed</c>, <c>transaction.failed</c>, <c>transaction.expired</c> or
+/// <c>transaction.cancelled</c>. Sent only on final statuses.
+/// </summary>
 public sealed record TransactionWebhookEvent
 {
     public string Event { get; init; } = string.Empty;

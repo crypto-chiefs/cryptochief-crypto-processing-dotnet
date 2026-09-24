@@ -15,6 +15,12 @@ public static class TxStatus
     public const string Confirmed    = "confirmed";
     public const string Failed       = "failed";
     public const string Expired      = "expired";
+
+    /// <summary>
+    /// EVM: replaced by a newer signature from the same address before it was executed;
+    /// <c>ErrorReason</c> is <c>SUPERSEDED_BY:&lt;new uuid&gt;</c>.
+    /// </summary>
+    public const string Cancelled    = "cancelled";
 }
 
 public sealed record SolanaAccount
@@ -58,6 +64,12 @@ public sealed record SignTransactionResponse
     public string ExpiresAt { get; init; } = string.Empty;
     public string ChainFamily { get; init; } = string.Empty;
     public string? Network { get; init; }
+
+    /// <summary>
+    /// EVM: uuids of the earlier unexecuted signatures from the same address that this one
+    /// replaced; they turn <see cref="TxStatus.Cancelled"/>. Empty when there were none.
+    /// </summary>
+    public IReadOnlyList<string> SupersededUuids { get; init; } = Array.Empty<string>();
 }
 
 public sealed record EstimateTransactionRequest
@@ -168,11 +180,21 @@ public sealed record TransactionInfo
 
     public string? CreatedAt { get; init; }
     public string? UpdatedAt { get; init; }
+
+    /// <summary>
+    /// Why the transaction is failed, expired or cancelled (<c>SUPERSEDED_BY:&lt;uuid&gt;</c>), or
+    /// why a signed one could not be executed yet
+    /// (<c>NONCE_GAP: missing_nonce=&lt;n&gt; blocking_uuid=&lt;uuid&gt;</c>,
+    /// <c>NONCE_ALREADY_USED: chain_nonce=&lt;n&gt;</c>).
+    /// </summary>
+    public string? ErrorReason { get; init; }
+
+    /// <summary>Not sent by the API; read <see cref="ErrorReason"/>.</summary>
     public string? Error { get; init; }
 
     public bool IsTerminal => Status switch
     {
-        TxStatus.Confirmed or TxStatus.Failed or TxStatus.Expired => true,
+        TxStatus.Confirmed or TxStatus.Failed or TxStatus.Expired or TxStatus.Cancelled => true,
         _ => false,
     };
 
