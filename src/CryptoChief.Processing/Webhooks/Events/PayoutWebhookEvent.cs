@@ -1,4 +1,5 @@
 using System.Text.Json;
+using CryptoChief.Processing.Models;
 
 namespace CryptoChief.Processing.Webhooks.Events;
 
@@ -71,6 +72,13 @@ public sealed record TransactionWebhookEvent
     public string? ErrorReason { get; init; }
 }
 
+/// <summary>
+/// An invoice event. Alongside the lifecycle events (<c>invoice.paid</c> and the rest) a
+/// multi-payment order (<see cref="IsPaymentMultiple"/>) also emits
+/// <c>invoice.wrong_amount_waiting</c> on EVERY received payment while the invoiced amount
+/// is not yet collected, and <c>invoice.late_payment</c> when a payment arrives after the
+/// final status, inside the observation window.
+/// </summary>
 public sealed record PayInWebhookEvent
 {
     public string Event { get; init; } = string.Empty;
@@ -91,6 +99,21 @@ public sealed record PayInWebhookEvent
 
     [System.Text.Json.Serialization.JsonPropertyName("txid")]
     public string? TxId { get; init; }
+
+    /// <summary>
+    /// Present only on orders created with <c>is_payment_multiple</c> - the invoice can be
+    /// paid by several transactions.
+    /// </summary>
+    public bool? IsPaymentMultiple { get; init; }
+
+    /// <summary>Total received so far, in crypto. Only on multi-payment orders.</summary>
+    public string? ReceivedAmountCrypto { get; init; }
+
+    /// <summary>What is still left to pay, in crypto. Only on multi-payment orders.</summary>
+    public string? RemainingAmountCrypto { get; init; }
+
+    /// <summary>The individual payments received. Only on multi-payment orders.</summary>
+    public IReadOnlyList<PayInPayment>? Payments { get; init; }
 }
 
 public sealed record StaticDepositWebhookEvent

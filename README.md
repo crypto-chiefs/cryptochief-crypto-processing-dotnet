@@ -447,8 +447,20 @@ var invoice = await client.PayIns.CreateAsync(new CreatePayInRequest
 // invoice.ToAddress is the deposit address — show it to the customer.
 ```
 
+Two optional knobs on `CreatePayInRequest`:
+
+- `AccuracyPaymentPercent` — how close the paid amount must be, 0–15 (default 5);
+  `-1` accepts any amount and closes the order `paid` / `paid_less` / `paid_over`
+  by the direction of the difference.
+- `IsPaymentMultiple` — let the customer pay in several transactions; an underpayment
+  parks the order in `PayInStatus.WrongAmountWaiting` (payable until one hour past
+  expiry) instead of closing it.
+
 Inbound webhooks land on `UrlCallback` carrying a `PayInWebhookEvent` —
-verify with `WebhookVerifier` (see below).
+verify with `WebhookVerifier` (see below). Multi-payment orders also emit
+`invoice.wrong_amount_waiting` on every received payment and `invoice.late_payment`
+when a payment arrives after the final status; the payload then carries `Payments`
+with each receipt plus the `ReceivedAmountCrypto` / `RemainingAmountCrypto` totals.
 
 ## Wallets and RSA-encrypted private keys
 

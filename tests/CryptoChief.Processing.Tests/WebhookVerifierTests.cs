@@ -3,6 +3,7 @@ using System.Text;
 using System.Text.Json;
 using CryptoChief.Processing.Errors;
 using CryptoChief.Processing.Http;
+using CryptoChief.Processing.Models;
 using CryptoChief.Processing.Webhooks;
 using CryptoChief.Processing.Webhooks.Events;
 using FluentAssertions;
@@ -106,6 +107,52 @@ public class WebhookVerifierTests
 
         var expectedEvent = System.Text.Json.JsonDocument.Parse(v.BodyBytes).RootElement.GetProperty("event").GetString();
         evt.GetType().GetProperty("Event")!.GetValue(evt).Should().Be(expectedEvent);
+    }
+
+    [Fact]
+    public void PayIn_wrong_amount_waiting_event_decodes_multi_payment_fields()
+    {
+        var body = Encoding.UTF8.GetBytes(
+            "{\"event\":\"invoice.wrong_amount_waiting\",\"uuid\":\"p-1\",\"order_id\":\"o-1\",\"user_id\":\"u-1\","
+            + "\"status\":\"wrong_amount_waiting\",\"prev_status\":\"pending\",\"amount_crypto\":\"5.000000\","
+            + "\"is_payment_multiple\":true,\"received_amount_crypto\":\"3.500000\",\"remaining_amount_crypto\":\"1.500000\","
+            + "\"payments\":["
+            + "{\"txid\":\"a1b2\",\"amount_crypto\":\"2.000000\",\"confirmations\":3,\"status\":\"confirmed\",\"seen_at\":\"2026-09-30T10:00:00Z\"},"
+            + "{\"txid\":\"c3d4\",\"amount_crypto\":\"1.500000\",\"confirmations\":1,\"status\":\"confirming\",\"seen_at\":\"2026-09-30T10:05:00Z\"}]}");
+
+        var evt = WebhookVerifier.VerifyAndDecode<PayInWebhookEvent>(Key, body, Signed(body, T), At(T));
+
+        evt.Event.Should().Be("invoice.wrong_amount_waiting");
+        evt.Status.Should().Be(PayInStatus.WrongAmountWaiting);
+        evt.IsPaymentMultiple.Should().BeTrue();
+        evt.ReceivedAmountCrypto.Should().Be("3.500000");
+        evt.RemainingAmountCrypto.Should().Be("1.500000");
+        evt.Payments.Should().HaveCount(2);
+        var first = evt.Payments![0];
+        first.TxId.Should().Be("a1b2");
+        first.AmountCrypto.Should().Be("2.000000");
+        first.Confirmations.Should().Be(3);
+        first.Status.Should().Be("confirmed");
+        first.SeenAt.Should().Be("2026-09-30T10:00:00Z");
+        evt.Payments![1].TxId.Should().Be("c3d4");
+    }
+
+    // A payload without the multi-payment members still decodes; they read as null.
+    [Theory]
+    [InlineData("invoice.paid")]
+    [InlineData("invoice.late_payment")]
+    public void PayIn_event_without_multi_payment_fields_decodes_with_nulls(string eventName)
+    {
+        var body = Encoding.UTF8.GetBytes(
+            "{\"event\":\"" + eventName + "\",\"uuid\":\"p-1\",\"order_id\":\"o-1\",\"status\":\"paid\"}");
+
+        var evt = WebhookVerifier.VerifyAndDecode<PayInWebhookEvent>(Key, body, Signed(body, T), At(T));
+
+        evt.Event.Should().Be(eventName);
+        evt.IsPaymentMultiple.Should().BeNull();
+        evt.ReceivedAmountCrypto.Should().BeNull();
+        evt.RemainingAmountCrypto.Should().BeNull();
+        evt.Payments.Should().BeNull();
     }
 
     [Fact]

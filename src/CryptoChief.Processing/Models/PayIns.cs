@@ -8,13 +8,23 @@ public static class PayInMode
 
 public static class PayInStatus
 {
-    public const string WaitingAssetSelect = "waiting_asset_select";
-    public const string Pending            = "pending";
-    public const string Processing         = "processing";
-    public const string Process            = "process";
-    public const string Paid               = "paid";
-    public const string Cancel             = "cancel";
-    public const string Expired            = "expired";
+    public const string WaitingAssetSelect  = "waiting_asset_select";
+    public const string Pending             = "pending";
+    public const string Processing          = "processing";
+    public const string Process             = "process";
+    public const string Paid                = "paid";
+    /// <summary>Final: paid, but less than invoiced - a wildcard-accuracy or multi-payment order.</summary>
+    public const string PaidLess            = "paid_less";
+    /// <summary>Final: paid more than invoiced - a wildcard-accuracy or multi-payment order.</summary>
+    public const string PaidOver            = "paid_over";
+    public const string Cancel              = "cancel";
+    public const string Expired             = "expired";
+    /// <summary>
+    /// A multi-payment order (<see cref="CreatePayInRequest.IsPaymentMultiple"/>) that has
+    /// received less than the invoiced amount so far; the remainder is payable until
+    /// one hour past <c>expired_at</c>.
+    /// </summary>
+    public const string WrongAmountWaiting  = "wrong_amount_waiting";
 }
 
 public sealed record CreatePayInRequest
@@ -49,7 +59,20 @@ public sealed record CreatePayInRequest
     public string? UrlSuccess { get; init; }
     public string? UrlError { get; init; }
     public string? AdditionalData { get; init; }
+
+    /// <summary>
+    /// How close the paid amount must be to the invoiced one, in percent: 0 to 15, default 5.
+    /// The wildcard <c>-1</c> accepts any amount - the order then closes as
+    /// <c>paid</c> / <c>paid_less</c> / <c>paid_over</c> by the direction of the difference.
+    /// </summary>
     public int? AccuracyPaymentPercent { get; init; }
+
+    /// <summary>
+    /// Let the invoice be paid by several transactions. An underpayment moves the order to
+    /// <see cref="PayInStatus.WrongAmountWaiting"/> instead of closing it, and the remainder
+    /// is payable until one hour past <c>expired_at</c>. Omit for the default (single payment).
+    /// </summary>
+    public bool? IsPaymentMultiple { get; init; }
 
     public string? AmountFiat { get; init; }
     public string? Currency { get; init; }
@@ -93,13 +116,40 @@ public sealed record PayIn
     public string? CreatedAt { get; init; }
     public string? UpdatedAt { get; init; }
 
+    /// <summary>
+    /// Present only on orders created with <c>is_payment_multiple</c> - the invoice can be
+    /// paid by several transactions.
+    /// </summary>
+    public bool? IsPaymentMultiple { get; init; }
+
+    /// <summary>Total received so far, in crypto. Only on multi-payment orders.</summary>
+    public string? ReceivedAmountCrypto { get; init; }
+
+    /// <summary>What is still left to pay, in crypto. Only on multi-payment orders.</summary>
+    public string? RemainingAmountCrypto { get; init; }
+
+    /// <summary>The individual payments received. Only on multi-payment orders.</summary>
+    public IReadOnlyList<PayInPayment>? Payments { get; init; }
+
     public bool IsTerminal => Status switch
     {
-        PayInStatus.Paid or PayInStatus.Cancel or PayInStatus.Expired => true,
+        PayInStatus.Paid or PayInStatus.PaidLess or PayInStatus.PaidOver
+            or PayInStatus.Cancel or PayInStatus.Expired => true,
         _ => false,
     };
 
     public bool Succeeded => Status == PayInStatus.Paid;
+}
+
+/// <summary>One payment towards a multi-payment invoice; see <see cref="PayIn.Payments"/>.</summary>
+public sealed record PayInPayment
+{
+    [System.Text.Json.Serialization.JsonPropertyName("txid")]
+    public string? TxId { get; init; }
+    public string? AmountCrypto { get; init; }
+    public int? Confirmations { get; init; }
+    public string? Status { get; init; }
+    public string? SeenAt { get; init; }
 }
 
 public sealed record SelectAssetRequest

@@ -82,6 +82,14 @@ public class RequestBodyTests
                 CourseSource = null, Assets = null, AmountCrypto = null, Asset = null,
             }),
             """{"mode":"fiat","order_id":"o-1","user_id":"u-1"}"""),
+        ["payins_create_multi_payment_wildcard_accuracy"] = (
+            c => c.PayIns.CreateAsync(new CreatePayInRequest
+            {
+                OrderId = "o-1", UserId = "u-1", Mode = PayInMode.Crypto, AmountCrypto = "10",
+                Asset = new Asset { Coin = "USDT", Network = "TRON" },
+                AccuracyPaymentPercent = -1, IsPaymentMultiple = true,
+            }),
+            """{"accuracy_payment_percent":-1,"amount_crypto":"10","asset":{"coin":"USDT","network":"TRON"},"is_payment_multiple":true,"mode":"crypto","order_id":"o-1","user_id":"u-1"}"""),
         ["payins_create_nested_nulls"] = (
             c => c.PayIns.CreateAsync(new CreatePayInRequest
             {

@@ -66,6 +66,10 @@ static Task<PayIn> CreateFiatInvoice(CryptoChiefClient client) =>
         UrlCallback = "https://your.app/webhooks/invoice",
         UrlSuccess  = "https://your.app/checkout/success",
         UrlError    = "https://your.app/checkout/error",
+        // AccuracyPaymentPercent: tolerance 0..15 (default 5); -1 accepts any amount and
+        // closes the order paid / paid_less / paid_over. IsPaymentMultiple = true lets the
+        // invoice be paid by several transactions - an underpayment parks it in
+        // wrong_amount_waiting, payable until one hour past expiry.
     });
 
 static Task<PayIn> CreateCryptoInvoice(CryptoChiefClient client) =>

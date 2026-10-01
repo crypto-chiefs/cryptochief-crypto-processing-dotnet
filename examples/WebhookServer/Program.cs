@@ -83,6 +83,10 @@ app.MapPost("/webhooks/invoice", async (HttpRequest req) =>
     var body = ms.ToArray();
     try
     {
+        // Multi-payment orders (is_payment_multiple) also fire invoice.wrong_amount_waiting
+        // on EVERY receipt while underfunded and invoice.late_payment for a payment after
+        // the final status; evt.Payments then lists each payment alongside
+        // evt.ReceivedAmountCrypto / evt.RemainingAmountCrypto.
         var evt = WebhookVerifier.VerifyAndDecode<PayInWebhookEvent>(apiKey, body, req.Headers);
         app.Logger.LogInformation(
             "invoice {Uuid}: {Status} (event={Event}, paid={Amount} {Coin})",
