@@ -12,7 +12,7 @@
 
   <PropertyGroup Label="NuGet">
     <PackageId>CryptoChief.Processing</PackageId>
-    <Version>0.13.0</Version>
+    <Version>0.14.0</Version>
     <Authors>Crypto Chief</Authors>
     <Company>Crypto Chief</Company>
     <Product>Crypto Chief Processing .NET SDK</Product>
@@ -29,7 +29,7 @@
     <PublishRepositoryUrl>true</PublishRepositoryUrl>
     <EmbedUntrackedSources>true</EmbedUntrackedSources>
     <DebugType>portable</DebugType>
-    <PackageReleaseNotes>0.13.0 — EVM: a new signature replaces the earlier signatures from the same address that were not executed; they turn TxStatus.Cancelled (final status) and SignTransactionResponse.SupersededUuids lists them. New webhook event transaction.cancelled. New TransactionInfo.ErrorReason: why a transaction failed, expired or was cancelled, or why a signed one cannot be executed yet; TransactionInfo.Error is not sent by the API. New error codes: NONCE_GAP and NONCE_ALREADY_USED (execute), PREVIOUS_EXECUTE_UNRESOLVED (sign).</PackageReleaseNotes>
+    <PackageReleaseNotes>0.14.0 — Multi-payment PayIn (IsPaymentMultiple): invoices can be paid in several transfers; underpaid orders sit in wrong_amount_waiting with a 1-hour top-up window; new webhook events invoice.wrong_amount_waiting and invoice.late_payment; payloads and PayIn carry IsPaymentMultiple, ReceivedAmountCrypto, RemainingAmountCrypto and Payments. AccuracyPaymentPercent now accepts -1..15 (default 5; -1 = any amount, final status by direction). PayInStatus gains WrongAmountWaiting, PaidLess, PaidOver; the latter two are terminal (fixes WaitForPayInAsync hanging on them).</PackageReleaseNotes>
   </PropertyGroup>
 
   <ItemGroup>
