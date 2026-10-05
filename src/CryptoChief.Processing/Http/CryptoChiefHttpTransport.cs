@@ -202,6 +202,7 @@ internal sealed class CryptoChiefHttpTransport
                 throw last;
             }
 
+            var status = resp.StatusCode;
             byte[] respBody;
             try
             {
@@ -211,12 +212,23 @@ internal sealed class CryptoChiefHttpTransport
                 respBody = await resp.Content.ReadAsByteArrayAsync().ConfigureAwait(false);
 #endif
             }
+            catch (Exception ex) when (ex is HttpRequestException or IOException)
+            {
+                last = new CryptoChiefApiException(ErrorCodes.NetworkError, status, ex.Message);
+                if (attempt + 1 < attempts) continue;
+                throw last;
+            }
+            catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+            {
+                last = new CryptoChiefApiException(ErrorCodes.NetworkError, status, "request timed out");
+                if (attempt + 1 < attempts) continue;
+                throw last;
+            }
             finally { resp.Dispose(); }
 
             _logger.LogDebug("cryptochief response: path={Path} status={Status} bytes={Bytes}",
-                path, (int)resp.StatusCode, respBody.Length);
+                path, (int)status, respBody.Length);
 
-            var status = resp.StatusCode;
             if ((int)status >= 200 && (int)status < 300)
                 return respBody;
 
@@ -233,7 +245,9 @@ internal sealed class CryptoChiefHttpTransport
                 skipDelay = true;
                 continue;
             }
-            if ((int)status >= 500 && attempt + 1 < attempts && !IsOrderBody(respBody))
+            // Only 502, 503 and 504 are retried; 500 and every other status are raised at once.
+            if (CryptoChiefApiException.IsRetryableStatus(status) && attempt + 1 < attempts
+                && !IsOrderBody(respBody))
             {
                 last = apiErr;
                 continue;
@@ -325,8 +339,8 @@ internal sealed class CryptoChiefHttpTransport
     }
 
     // A non-2xx body that carries an order view ("id" + "status", as energy rent / native buy
-    // send on a refused order) is a settled business outcome, not a transient failure — retrying
-    // it would only wait. The service layer recovers the order from CryptoChiefApiException.RawBody.
+    // send on a refused order with 502) is a settled business outcome and is not retried. The
+    // service layer recovers the order from CryptoChiefApiException.RawBody.
     private static bool IsOrderBody(byte[] body)
     {
         try

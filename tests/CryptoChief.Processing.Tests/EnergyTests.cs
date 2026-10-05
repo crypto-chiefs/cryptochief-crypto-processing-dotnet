@@ -159,7 +159,7 @@ public class EnergyTests
         var order = await client.WithIdempotencyKey("energy-43").Energy
             .RentAsync(new EnergyRentRequest { ReceiveAddress = Tron });
 
-        // A settled order is a business outcome, not a transient failure: no 5xx retry.
+        // A settled order is a business outcome: it is not retried.
         handler.Captured.Should().ContainSingle();
 
         order.Id.Should().Be(4473);
@@ -221,7 +221,7 @@ public class EnergyTests
     }
 
     [Fact]
-    public async Task Rent_an_error_envelope_throws_and_retries_the_5xx()
+    public async Task Rent_an_error_envelope_on_502_throws_after_the_retries()
     {
         var handler = new CapturingHandler(_ => Resp(HttpStatusCode.BadGateway,
             "{\"ok\":false,\"error\":\"SERVICE_ERROR\",\"msg\":\"ENERGY_UPSTREAM_DOWN\"}"));
@@ -233,7 +233,7 @@ public class EnergyTests
 
         ex.Which.Code.Should().Be("ENERGY_UPSTREAM_DOWN");
         ex.Which.HttpStatus.Should().Be(HttpStatusCode.BadGateway);
-        // No order in the body: the plain 5xx retry policy applies.
+        // No order in the body: a 502 is retried like any other request.
         handler.Captured.Should().HaveCount(4);
     }
 

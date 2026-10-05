@@ -272,7 +272,7 @@ public class HmacV1TransportTests
     {
         var calls = 0;
         var handler = new SnapshotHandler(_ => ++calls < 3
-            ? Resp(HttpStatusCode.InternalServerError, "{\"ok\":false,\"error\":\"SERVICE_ERROR\"}")
+            ? Resp(HttpStatusCode.ServiceUnavailable, "{\"ok\":false,\"error\":\"SERVICE_ERROR\"}")
             : Resp(HttpStatusCode.OK, WalletBody));
         var client = NewClient(handler, "M-1", "K-1", "https://test/");
         var now = T;

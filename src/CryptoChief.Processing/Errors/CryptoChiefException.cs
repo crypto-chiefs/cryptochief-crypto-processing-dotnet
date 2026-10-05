@@ -33,9 +33,15 @@ public sealed class CryptoChiefApiException : CryptoChiefException
         RawBody = rawBody;
     }
 
-    /// <summary>True if plausibly transient — 5xx or network errors.</summary>
+    /// <summary>True for HTTP 502, 503, 504 and network errors of this client — the failures
+    /// it retries itself. False for every other status, 500 included, also when the body
+    /// carries the code NETWORK_ERROR.</summary>
     public bool IsRetryable =>
-        (int)HttpStatus >= 500 || Code == ErrorCodes.NetworkError;
+        (Code == ErrorCodes.NetworkError && RawBody is null) || IsRetryableStatus(HttpStatus);
+
+    /// <summary>HTTP 502, 503 and 504; no other status is retried.</summary>
+    internal static bool IsRetryableStatus(HttpStatusCode status) =>
+        (int)status is 502 or 503 or 504;
 
     private static string BuildMessage(string code, HttpStatusCode status, string message)
     {

@@ -173,22 +173,226 @@ public class TransportTests
         ex.Which.Code.Should().Be("HTTP_502");
     }
 
+    private const string PayoutBody = "{\"uuid\":\"u-1\",\"order_id\":\"o-1\",\"status\":\"queue\"}";
+
     [Fact]
-    public async Task Retries_5xx_then_succeeds()
+    public async Task A_500_is_attempted_once()
+    {
+        var attempts = 0;
+        var handler = new CapturingHandler(_ =>
+        {
+            attempts++;
+            return Resp(HttpStatusCode.InternalServerError,
+                "{\"ok\":false,\"error\":\"INTERNAL_ERROR\",\"msg\":\"internal error\"}");
+        });
+        var client = NewClient(handler);
+
+        var ex = await FluentActions.Invoking(() => client.Payouts.InfoAsync("u-1"))
+            .Should().ThrowAsync<CryptoChiefApiException>();
+        attempts.Should().Be(1);
+        ex.Which.Code.Should().Be("INTERNAL_ERROR");
+        ex.Which.HttpStatus.Should().Be(HttpStatusCode.InternalServerError);
+        ex.Which.IsRetryable.Should().BeFalse();
+    }
+
+    [Theory]
+    [InlineData(HttpStatusCode.BadGateway)]
+    [InlineData(HttpStatusCode.ServiceUnavailable)]
+    [InlineData(HttpStatusCode.GatewayTimeout)]
+    public async Task Retries_502_503_504_until_the_budget_is_spent(HttpStatusCode status)
+    {
+        var attempts = 0;
+        var handler = new CapturingHandler(_ =>
+        {
+            attempts++;
+            return Resp(status, "");
+        });
+        var client = NewClient(handler);
+
+        var ex = await FluentActions.Invoking(() => client.Payouts.InfoAsync("u-1"))
+            .Should().ThrowAsync<CryptoChiefApiException>();
+        attempts.Should().Be(4); // MaxRetries 3 + the first attempt
+        ex.Which.HttpStatus.Should().Be(status);
+        ex.Which.Code.Should().Be($"HTTP_{(int)status}");
+        ex.Which.IsRetryable.Should().BeTrue();
+    }
+
+    [Theory]
+    [InlineData(HttpStatusCode.BadGateway)]
+    [InlineData(HttpStatusCode.ServiceUnavailable)]
+    [InlineData(HttpStatusCode.GatewayTimeout)]
+    public async Task Retries_502_503_504_then_succeeds(HttpStatusCode status)
     {
         var attempts = 0;
         var handler = new CapturingHandler(_ =>
         {
             attempts++;
             return attempts < 3
-                ? Resp(HttpStatusCode.InternalServerError, "{\"ok\":false,\"error\":\"SERVICE_ERROR\"}")
-                : Resp(HttpStatusCode.OK, "{\"uuid\":\"u-1\",\"order_id\":\"o-1\",\"status\":\"queue\"}");
+                ? Resp(status, "{\"ok\":false,\"error\":\"SERVICE_ERROR\"}")
+                : Resp(HttpStatusCode.OK, PayoutBody);
         });
         var client = NewClient(handler);
 
         var info = await client.Payouts.InfoAsync("u-1");
         info.Uuid.Should().Be("u-1");
         attempts.Should().Be(3);
+    }
+
+    [Theory]
+    [InlineData(400)]
+    [InlineData(404)]
+    [InlineData(409)]
+    [InlineData(429)]
+    [InlineData(500)]
+    [InlineData(501)]
+    [InlineData(505)]
+    [InlineData(520)]
+    [InlineData(599)]
+    public async Task Any_other_status_is_attempted_once(int status)
+    {
+        var attempts = 0;
+        var handler = new CapturingHandler(_ =>
+        {
+            attempts++;
+            return Resp((HttpStatusCode)status, "");
+        });
+        var client = NewClient(handler);
+
+        var ex = await FluentActions.Invoking(() => client.Payouts.InfoAsync("u-1"))
+            .Should().ThrowAsync<CryptoChiefApiException>();
+        attempts.Should().Be(1);
+        ex.Which.HttpStatus.Should().Be((HttpStatusCode)status);
+        ex.Which.IsRetryable.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task Retries_a_network_error_then_succeeds()
+    {
+        var attempts = 0;
+        var handler = new CapturingHandler(_ =>
+        {
+            attempts++;
+            return attempts < 3
+                ? throw new HttpRequestException("connection refused")
+                : Resp(HttpStatusCode.OK, PayoutBody);
+        });
+        var client = NewClient(handler);
+
+        var info = await client.Payouts.InfoAsync("u-1");
+        info.Uuid.Should().Be("u-1");
+        attempts.Should().Be(3);
+    }
+
+    [Fact]
+    public async Task A_network_error_is_retried_until_the_budget_is_spent()
+    {
+        var attempts = 0;
+        var handler = new CapturingHandler(_ =>
+        {
+            attempts++;
+            throw new HttpRequestException("connection reset");
+        });
+        var client = NewClient(handler);
+
+        var ex = await FluentActions.Invoking(() => client.Payouts.InfoAsync("u-1"))
+            .Should().ThrowAsync<CryptoChiefApiException>();
+        attempts.Should().Be(4);
+        ex.Which.Code.Should().Be(ErrorCodes.NetworkError);
+        ex.Which.HttpStatus.Should().Be((HttpStatusCode)0);
+        ex.Which.IsRetryable.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task Retries_a_timeout_then_succeeds()
+    {
+        var attempts = 0;
+        var handler = new CapturingHandler(_ =>
+        {
+            attempts++;
+            return attempts < 2
+                ? throw new TaskCanceledException("timed out")
+                : Resp(HttpStatusCode.OK, PayoutBody);
+        });
+        var client = NewClient(handler);
+
+        var info = await client.Payouts.InfoAsync("u-1");
+        info.Uuid.Should().Be("u-1");
+        attempts.Should().Be(2);
+    }
+
+    [Fact]
+    public async Task Retries_a_failed_body_read_then_succeeds()
+    {
+        var attempts = 0;
+        var handler = new CapturingHandler(_ =>
+        {
+            attempts++;
+            return attempts < 2
+                ? new HttpResponseMessage(HttpStatusCode.OK) { Content = new BrokenContent() }
+                : Resp(HttpStatusCode.OK, PayoutBody);
+        });
+        var client = NewClient(handler);
+
+        var info = await client.Payouts.InfoAsync("u-1");
+        info.Uuid.Should().Be("u-1");
+        attempts.Should().Be(2);
+    }
+
+    [Fact]
+    public async Task A_failed_body_read_is_retried_until_the_budget_is_spent()
+    {
+        var attempts = 0;
+        var handler = new CapturingHandler(_ =>
+        {
+            attempts++;
+            return new HttpResponseMessage(HttpStatusCode.OK) { Content = new BrokenContent() };
+        });
+        var client = NewClient(handler);
+
+        var ex = await FluentActions.Invoking(() => client.Payouts.InfoAsync("u-1"))
+            .Should().ThrowAsync<CryptoChiefApiException>();
+        attempts.Should().Be(4);
+        ex.Which.Code.Should().Be(ErrorCodes.NetworkError);
+        ex.Which.IsRetryable.Should().BeTrue();
+    }
+
+    [Theory]
+    [InlineData(400, false)]
+    [InlineData(429, false)]
+    [InlineData(500, false)]
+    [InlineData(501, false)]
+    [InlineData(502, true)]
+    [InlineData(503, true)]
+    [InlineData(504, true)]
+    [InlineData(505, false)]
+    [InlineData(520, false)]
+    public void IsRetryable_is_true_for_502_503_504_only(int status, bool retryable)
+    {
+        new CryptoChiefApiException($"HTTP_{status}", (HttpStatusCode)status, "refused")
+            .IsRetryable.Should().Be(retryable);
+        new CryptoChiefApiException(ErrorCodes.ServiceError, (HttpStatusCode)status, "refused")
+            .IsRetryable.Should().Be(retryable);
+    }
+
+    [Fact]
+    public void IsRetryable_is_true_for_network_errors()
+    {
+        new CryptoChiefApiException(ErrorCodes.NetworkError, 0, "connection refused")
+            .IsRetryable.Should().BeTrue();
+        // A body that broke off mid-read keeps the status it arrived with.
+        new CryptoChiefApiException(ErrorCodes.NetworkError, HttpStatusCode.OK, "connection reset")
+            .IsRetryable.Should().BeTrue();
+    }
+
+    [Fact]
+    public void IsRetryable_is_false_for_a_500_naming_network_error()
+    {
+        // A white-label install answers 500 with code NETWORK_ERROR when its own call fails.
+        const string body = "{\"data\":null,\"error\":{\"status\":500,\"name\":\"ApplicationError\","
+            + "\"message\":\"provider error: NETWORK_ERROR\",\"details\":{\"code\":\"NETWORK_ERROR\"}}}";
+        var ex = new CryptoChiefApiException(ErrorCodes.NetworkError, HttpStatusCode.InternalServerError,
+            "provider error: NETWORK_ERROR", body);
+        ex.IsRetryable.Should().BeFalse();
     }
 
     [Fact]
@@ -232,6 +436,22 @@ public class TransportTests
         {
             Captured.Add(request);
             return Task.FromResult(reply(request));
+        }
+    }
+
+    /// <summary>A response body whose connection drops while it is read.</summary>
+    private sealed class BrokenContent : HttpContent
+    {
+        protected override async Task SerializeToStreamAsync(Stream stream, TransportContext? context)
+        {
+            await Task.Yield();
+            throw new IOException("connection reset while reading the body");
+        }
+
+        protected override bool TryComputeLength(out long length)
+        {
+            length = 0;
+            return false;
         }
     }
 }

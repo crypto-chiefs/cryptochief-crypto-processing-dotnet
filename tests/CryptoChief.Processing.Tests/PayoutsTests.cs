@@ -1,5 +1,6 @@
 using System.Net;
 using System.Text;
+using CryptoChief.Processing.Errors;
 using CryptoChief.Processing.Http;
 using CryptoChief.Processing.Models;
 using CryptoChief.Processing.Polling;
@@ -294,6 +295,37 @@ public class PayoutsTests
 
         handler.Captured.Should().HaveCount(4);
         final.Status.Should().Be(PayoutStatus.Paid);
+    }
+
+    [Fact]
+    public async Task Waiting_polls_on_after_a_503()
+    {
+        var replies = new Queue<HttpResponseMessage>(new[]
+        {
+            Resp(HttpStatusCode.ServiceUnavailable, ""),
+            Resp(HttpStatusCode.OK, PaidPayoutBody),
+        });
+        var handler = new CapturingHandler(_ => replies.Dequeue());
+
+        var final = await NewClient(handler).WaitForPayoutAsync("p-1",
+            new PollOptions { Interval = TimeSpan.FromMilliseconds(1), Timeout = TimeSpan.FromSeconds(10) });
+
+        handler.Captured.Should().HaveCount(2);
+        final.Status.Should().Be(PayoutStatus.Paid);
+    }
+
+    [Fact]
+    public async Task Waiting_stops_on_a_500()
+    {
+        var handler = new CapturingHandler(_ => Resp(HttpStatusCode.InternalServerError,
+            "{\"ok\":false,\"error\":\"INTERNAL_ERROR\",\"msg\":\"internal error\"}"));
+
+        var act = () => NewClient(handler).WaitForPayoutAsync("p-1",
+            new PollOptions { Interval = TimeSpan.FromMilliseconds(1), Timeout = TimeSpan.FromSeconds(10) });
+
+        var ex = (await act.Should().ThrowAsync<CryptoChiefApiException>()).Which;
+        ex.HttpStatus.Should().Be(HttpStatusCode.InternalServerError);
+        handler.Captured.Should().ContainSingle();
     }
 
     [Fact]

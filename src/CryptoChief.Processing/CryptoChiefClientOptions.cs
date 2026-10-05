@@ -20,7 +20,7 @@ public sealed class CryptoChiefClientOptions
     /// <summary>HTTP timeout per request. Default 60 s — fits batch payout's longer hold time.</summary>
     public TimeSpan Timeout { get; set; } = TimeSpan.FromSeconds(60);
 
-    /// <summary>Retries on transport failure and 5xx. 0 disables.</summary>
+    /// <summary>Retries on network errors and HTTP 502, 503, 504. 0 disables.</summary>
     public int MaxRetries { get; set; } = 3;
 
     public TimeSpan InitialRetryDelay { get; set; } = TimeSpan.FromMilliseconds(200);

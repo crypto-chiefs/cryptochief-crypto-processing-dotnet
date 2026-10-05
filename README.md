@@ -23,8 +23,8 @@ first-class `IHttpClientFactory` integration.
 - **Contract calls without hand-encoded calldata** — Solidity ABI for EVM
   and TRON, Anchor + Borsh for Solana, Jetton / NFT / comment helpers for TON.
 - **Local RSA decryption** of generated wallet private keys (opt-in).
-- Stable error codes via a typed `CryptoChiefApiException`, automatic retry
-  on 5xx + transport faults with exponential-with-jitter backoff.
+- Stable error codes via a typed `CryptoChiefApiException`; automatic retry
+  of HTTP 502, 503, 504 and network errors with exponential-with-jitter backoff.
 - Arbitrary-precision amounts via `System.Numerics.BigInteger` — no `double`,
   ever.
 - Webhook verification + typed events (`PayoutWebhookEvent`,
@@ -693,8 +693,9 @@ catch (CryptoChiefApiException ex)
 With no code in the body, `Code` is `HTTP_<status>`. `ex.Message` includes the
 message; `ex.RawBody` keeps the body as received.
 
-`ex.IsRetryable` tells you whether the operation is plausibly transient
-(5xx, network).
+The client retries HTTP 502, 503, 504 and network errors (`MaxRetries`, 3 by default);
+any other status, 500 included, is thrown on the first attempt. `ex.IsRetryable` is true
+for exactly these.
 
 ## Amounts
 
@@ -727,7 +728,7 @@ var options = new CryptoChiefClientOptions
     ApiKey            = "...",
     BaseUrl           = "https://api-processing.crypto-chief.com", // default
     Timeout           = TimeSpan.FromSeconds(60),
-    MaxRetries        = 3,
+    MaxRetries        = 3,                                         // 502, 503, 504, network errors
     InitialRetryDelay = TimeSpan.FromMilliseconds(200),
     MaxRetryDelay     = TimeSpan.FromSeconds(5),
     UserAgent         = "my-service/1.0",
@@ -786,8 +787,8 @@ var signature = RequestSigner.SignHmacV1(apiKey, new HmacV1Input
 
 `Payouts.ExecuteAsync` and `Payouts.BatchExecuteAsync` are idempotent on
 `OrderId`: re-submitting the same `order_id` returns the same `uuid` rather
-than creating a second payout. The library's automatic retry on 5xx relies
-on this — your callers don't need any extra ceremony.
+than creating a second payout. The library's automatic retry of 502, 503, 504
+and network errors relies on this — your callers don't need any extra ceremony.
 
 ## Runnable examples
 

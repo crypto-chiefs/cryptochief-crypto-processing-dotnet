@@ -132,7 +132,7 @@ public class NativeTests
         var order = await client.WithIdempotencyKey("native-44").Native
             .BuyAsync(new NativeBuyRequest { Network = "TRON", ReceiveAddress = Tron, Amount = "0.05" });
 
-        // A settled order is a business outcome, not a transient failure: no 5xx retry.
+        // A settled order is a business outcome: it is not retried.
         handler.Captured.Should().ContainSingle();
 
         order.Id.Should().Be(103);
@@ -198,7 +198,7 @@ public class NativeTests
     }
 
     [Fact]
-    public async Task Buy_an_error_envelope_throws_and_retries_the_5xx()
+    public async Task Buy_an_error_envelope_on_502_throws_after_the_retries()
     {
         var handler = new CapturingHandler(_ => Resp(HttpStatusCode.BadGateway,
             "{\"ok\":false,\"error\":\"SERVICE_ERROR\",\"msg\":\"NATIVE_UPSTREAM_DOWN\"}"));
@@ -210,7 +210,7 @@ public class NativeTests
 
         ex.Which.Code.Should().Be("NATIVE_UPSTREAM_DOWN");
         ex.Which.HttpStatus.Should().Be(HttpStatusCode.BadGateway);
-        // No order in the body: the plain 5xx retry policy applies.
+        // No order in the body: a 502 is retried like any other request.
         handler.Captured.Should().HaveCount(4);
     }
 
