@@ -18,6 +18,19 @@ public static class ErrorCodes
     public const string ServiceError             = "SERVICE_ERROR";
     public const string Unauthorized             = "UNAUTHORIZED";
     public const string UrlCallbackRequired      = "URL_CALLBACK_REQUIRED";
+
+    /// <summary>
+    /// <c>url_callback</c> of a PayIn, payout, batch payout item or signed transaction: the host is a
+    /// non-public IP address, a single-label or local name, or resolves to a non-public address (HTTP 400).
+    /// </summary>
+    public const string UrlCallbackHostNotAllowed = "url_callback_HOST_NOT_ALLOWED";
+    /// <summary><c>url_callback</c>: the scheme is not https or http (HTTP 400).</summary>
+    public const string UrlCallbackSchemeInvalid = "url_callback_SCHEME_INVALID";
+    /// <summary><c>url_callback</c>: not an absolute URL (HTTP 400).</summary>
+    public const string UrlCallbackInvalid       = "url_callback_INVALID";
+    /// <summary>Static wallet <c>callback_url</c> (generate, set callback URL) breaks the same rule; the reason is in the message (HTTP 400).</summary>
+    public const string CallbackUrlInvalid       = "CALLBACK_URL_INVALID";
+
     public const string BatchEmpty               = "BATCH_EMPTY";
     public const string BatchTooLarge            = "BATCH_TOO_LARGE";
     public const string BatchDuplicateOrderId    = "BATCH_DUPLICATE_ORDER_ID";
@@ -51,6 +64,19 @@ public static class ErrorCodes
     public const string CallsNotAllowed          = "CALLS_NOT_ALLOWED_FOR_TRANSFER";
     public const string ContractCallsUnsupported = "CONTRACT_CALLS_UNSUPPORTED_ON_NETWORK";
     public const string ContractEstimateUnsupported = "CONTRACT_ESTIMATE_UNSUPPORTED";
+
+    /// <summary>
+    /// Transaction estimate or sign of a token transfer: <c>from_address</c> holds less of the token
+    /// than <c>value</c> (HTTP 400). Execute reports it as <c>PREFLIGHT_FAILED: insufficient_balance</c>.
+    /// </summary>
+    public const string InsufficientBalance      = "INSUFFICIENT_BALANCE";
+
+    /// <summary>
+    /// EVM sign: the transaction reverted in simulation (HTTP 400). The contract's reason may follow
+    /// (<c>SIMULATION_REVERTED: &lt;reason&gt;</c>); compare with <c>StartsWith</c>.
+    /// </summary>
+    public const string SimulationReverted       = "SIMULATION_REVERTED";
+
     public const string NetworkError             = "NETWORK_ERROR";
 
     /// <summary><c>Merchant</c> or an <c>X-CC-*</c> header is missing, repeated or malformed (HTTP 400).</summary>
