@@ -12,7 +12,7 @@
 
   <PropertyGroup Label="NuGet">
     <PackageId>CryptoChief.Processing</PackageId>
-    <Version>0.15.0</Version>
+    <Version>0.15.1</Version>
     <Authors>Crypto Chief</Authors>
     <Company>Crypto Chief</Company>
     <Product>Crypto Chief Processing .NET SDK</Product>
@@ -29,7 +29,7 @@
     <PublishRepositoryUrl>true</PublishRepositoryUrl>
     <EmbedUntrackedSources>true</EmbedUntrackedSources>
     <DebugType>portable</DebugType>
-    <PackageReleaseNotes>0.15.0 — Automatic retries: 502, 503, 504 and network errors only; 500 is no longer retried. CryptoChiefApiException.IsRetryable follows the same rule.</PackageReleaseNotes>
+    <PackageReleaseNotes>0.15.1 — Error codes INSUFFICIENT_BALANCE, SIMULATION_REVERTED (matched by prefix), url_callback_HOST_NOT_ALLOWED, url_callback_SCHEME_INVALID, url_callback_INVALID and CALLBACK_URL_INVALID.</PackageReleaseNotes>
   </PropertyGroup>
 
   <ItemGroup>
