@@ -7,7 +7,7 @@ public sealed partial class TransactionsService
     internal readonly CryptoChiefClient Client;
     internal TransactionsService(CryptoChiefClient client) => Client = client;
 
-    /// <summary>Build and sign a transaction without broadcasting. TTL: EVM 10m, UTXO 15m, TRON 45s, Solana 60s, XRP 90s, TON 300s.</summary>
+    /// <summary>Build and sign a transaction without broadcasting. TTL: EVM 10m, UTXO 15m, TRON 45s, Solana 25s, XRP 90s, TON 300s.</summary>
     public Task<SignTransactionResponse> SignAsync(
         SignTransactionRequest request, CancellationToken cancellationToken = default) =>
         Client.Transport.SendAsync<SignTransactionResponse>(

@@ -159,7 +159,7 @@ its last state is in `ex.Data["LastSnapshot"]`.
 
 `Transactions.SignAsync` builds and signs a transaction **without
 broadcasting**. The TTL of the signed reservation varies by chain (EVM 10 m,
-UTXO 15 m, TRON 45 s, Solana 60 s, XRP 90 s, TON 300 s) — call `ExecuteAsync`
+UTXO 15 m, TRON 45 s, Solana 25 s, XRP 90 s, TON 300 s) — call `ExecuteAsync`
 before it expires.
 
 ```csharp
