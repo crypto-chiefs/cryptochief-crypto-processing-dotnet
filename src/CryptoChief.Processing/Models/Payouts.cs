@@ -209,6 +209,13 @@ public sealed record BatchItemResult
     public string Status { get; init; } = string.Empty;
     public string? Uuid { get; init; }
     public string? Error { get; init; }
+
+    /// <summary>The HTTP status this item would return as a single request; absent on success.</summary>
+    public int? HttpStatus { get; init; }
+
+    /// <summary>True only for HTTP 502. Retry an execute item with the same <see cref="OrderId"/>.</summary>
+    [JsonIgnore]
+    public bool IsRetryable => HttpStatus == 502;
 }
 
 public sealed record BatchExecuteResponse

@@ -697,6 +697,11 @@ The client retries HTTP 502, 503, 504 and network errors (`MaxRetries`, 3 by def
 any other status, 500 included, is thrown on the first attempt. `ex.IsRetryable` is true
 for exactly these.
 
+For `BatchEstimateAsync` and `BatchExecuteAsync`, each `BatchItemResult` exposes
+`HttpStatus` (`int?`), the item's `http_status`. It is `null` when omitted, including
+on successful items. `item.IsRetryable` is true only for `HttpStatus == 502`;
+re-submit an execute item with the same `OrderId`. Items are not retried automatically.
+
 ## Amounts
 
 **Never use `double` or `decimal` for crypto amounts.** The full base-unit
