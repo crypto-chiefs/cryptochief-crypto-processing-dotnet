@@ -316,9 +316,9 @@ var signed = await client.Transactions.SignAnchorCallAsync(new AnchorCallRequest
     },
     Accounts = new[]
     {
-        new SolanaAccount { Pubkey = "YourWallet...", IsSigner = true,  IsWritable = true },
-        new SolanaAccount { Pubkey = "DataAcct...",   IsSigner = false, IsWritable = true },
-        new SolanaAccount { Pubkey = "11111111111111111111111111111111", IsSigner = false, IsWritable = false },
+        new SolanaAccount { Address = "YourWallet...", IsSigner = true,  IsWritable = true },
+        new SolanaAccount { Address = "DataAcct...",   IsSigner = false, IsWritable = true },
+        new SolanaAccount { Address = "11111111111111111111111111111111", IsSigner = false, IsWritable = false },
     },
 });
 ```

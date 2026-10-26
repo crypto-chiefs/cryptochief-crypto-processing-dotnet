@@ -143,6 +143,19 @@ public class RequestBodyTests
                 Calls = new[] { new ContractCall { To = Evm, Value = null, Data = null!, Accounts = null, Bounce = null } },
             }),
             """{"calls":[{"to":"0x742d35cc6634c0532925a3b844bc454e4438f44e"}],"from_address":"0x742d35cc6634c0532925a3b844bc454e4438f44e","network":"ETH","type":"contract"}"""),
+#pragma warning disable CS0618 // Pubkey is the deprecated alias of Address
+        ["transactions_solana_call_accounts"] = (
+            c => c.Transactions.SignSolanaCallAsync(new SolanaCallRequest
+            {
+                Network = "SOLANA_DEVNET", FromAddress = "From", Program = "Prog", InstructionData = new byte[] { 1, 2 },
+                Accounts = new[]
+                {
+                    new SolanaAccount { Address = "A", IsSigner = true, IsWritable = true },
+                    new SolanaAccount { Pubkey = "P" },
+                },
+            }),
+            """{"calls":[{"accounts":[{"address":"A","is_signer":true,"is_writable":true},{"address":"P","is_signer":false,"is_writable":false}],"data":"AQI=","to":"Prog"}],"from_address":"From","network":"SOLANA_DEVNET","type":"contract"}"""),
+#pragma warning restore CS0618
         ["transactions_execute_null_signed_tx"] = (
             c => c.Transactions.ExecuteAsync(new ExecuteTransactionRequest { Uuid = "u", SignedTxHex = null }),
             """{"uuid":"u"}"""),

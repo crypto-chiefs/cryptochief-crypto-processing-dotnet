@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+
 namespace CryptoChief.Processing.Models;
 
 public static class TxType
@@ -25,7 +27,16 @@ public static class TxStatus
 
 public sealed record SolanaAccount
 {
-    public required string Pubkey { get; init; }
+    private readonly string _address = string.Empty;
+
+    /// <summary>Base58 account address.</summary>
+    public string Address { get => _address; init => _address = value; }
+
+    /// <summary>Deprecated alias of <see cref="Address"/>.</summary>
+    [Obsolete("Use Address.")]
+    [JsonIgnore]
+    public string Pubkey { get => _address; init => _address = value; }
+
     public bool IsSigner { get; init; }
     public bool IsWritable { get; init; }
 }
