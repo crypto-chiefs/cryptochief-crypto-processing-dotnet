@@ -12,7 +12,7 @@
 
   <PropertyGroup Label="NuGet">
     <PackageId>CryptoChief.Processing</PackageId>
-    <Version>0.16.0</Version>
+    <Version>0.16.1</Version>
     <Authors>Crypto Chief</Authors>
     <Company>Crypto Chief</Company>
     <Product>Crypto Chief Processing .NET SDK</Product>
@@ -29,7 +29,7 @@
     <PublishRepositoryUrl>true</PublishRepositoryUrl>
     <EmbedUntrackedSources>true</EmbedUntrackedSources>
     <DebugType>portable</DebugType>
-    <PackageReleaseNotes>0.16.0 — Optional http_status on batch payout estimate and execute items. BatchItemResult.IsRetryable is true only for http_status 502.</PackageReleaseNotes>
+    <PackageReleaseNotes>0.16.1 — Solana account metas in contract calls are sent as address. SolanaAccount.Pubkey is deprecated.</PackageReleaseNotes>
   </PropertyGroup>
 
   <ItemGroup>
